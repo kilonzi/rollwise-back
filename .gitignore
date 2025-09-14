@@ -172,3 +172,5 @@ cython_debug/
 *.claude
 *.sqlite3
 
+uploads/
+
