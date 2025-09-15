@@ -172,5 +172,9 @@ cython_debug/
 *.claude
 *.sqlite3
 
+# Data storage directory
+store/
+
+# Legacy uploads (replaced by store/uploads)
 uploads/
 

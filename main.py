@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.admin_endpoints import router as admin_router
 from app.api.twilio_endpoints import router as twilio_router
 from app.api.dataset_endpoints import router as dataset_router
+from app.api.user_endpoints import router as user_router
 from app.config.settings import settings
 from app.models import create_tables
 
@@ -26,8 +27,8 @@ async def lifespan(fapp: FastAPI):
     print("   - Users (tenant members)")
     print("   - Agents (AI voice agents)")
     print("   - Conversations (call/SMS sessions)")
-    print("   - Transcripts (conversation content)")
-    print("   - ToolCalls (agent actions)")
+    print("   - Messages (chronological conversation content)")
+    print("   - ToolCalls (function execution logs)")
     print("   - BusinessDatasets (ChromaDB knowledge)")
 
     print("\n🎯 Platform ready for multi-tenant agent deployment!")
@@ -56,6 +57,7 @@ app.add_middleware(
 app.include_router(twilio_router, tags=["twilio"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(dataset_router, tags=["datasets"])
+app.include_router(user_router, prefix="/users", tags=["users"])
 
 
 # Health check endpoint
@@ -84,6 +86,7 @@ async def root():
             "agent_callback": "/agent/{agent_id}/callback",
             "websocket": "/ws/{agent_id}/twilio",
             "admin": "/admin/*",
+            "users": "/users/*",
             "health": "/health",
         },
         "admin_endpoints": {
@@ -93,6 +96,21 @@ async def root():
             "list_agents": "GET /admin/agents",
             "tenant_conversations": "GET /admin/tenants/{tenant_id}/conversations",
             "agent_conversations": "GET /admin/agents/{agent_id}/conversations",
+        },
+        "user_endpoints": {
+            "register": "POST /users/register",
+            "login": "POST /users/login",
+            "validate_token": "POST /users/validate-token",
+            "password_reset_request": "POST /users/password-reset-request",
+            "password_reset": "POST /users/password-reset",
+            "profile": "GET /users/profile",
+            "user_tenants": "GET /users/tenants",
+            "associate_tenant": "POST /users/tenants/associate",
+            "tenant_users": "GET /users/tenants/{tenant_id}/users",
+            "tenant_agents": "GET /users/tenants/{tenant_id}/agents",
+            "create_agent": "POST /users/tenants/{tenant_id}/agents",
+            "update_agent": "PUT /users/tenants/{tenant_id}/agents/{agent_id}",
+            "delete_agent": "DELETE /users/tenants/{tenant_id}/agents/{agent_id}",
         },
     }
 

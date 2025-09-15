@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.orm import Session
 
-from app.models import Conversation, Transcript, Agent, Tenant
+from app.models import Conversation, Message, Agent, Tenant
 
 
 class ConversationService:
@@ -36,10 +36,7 @@ class ConversationService:
         self.db.commit()
         self.db.refresh(conversation)
 
-        # Create empty transcript
-        transcript = Transcript(conversation_id=conversation.id, content="")
-        self.db.add(transcript)
-        self.db.commit()
+        # No need to create empty transcript anymore - messages are created as needed
 
         return conversation
 
@@ -75,43 +72,48 @@ class ConversationService:
             .first()
         )
 
-    def add_to_transcript(
-        self, conversation_id: str, speaker: str, content: str
+    def add_message(
+        self, conversation_id: str, role: str, content: str, audio_file_path: Optional[str] = None
     ) -> bool:
-        """Add content to conversation transcript"""
+        """Add a message to conversation - DEPRECATED: Use MessageService instead"""
+        from app.services.message_service import MessageService
 
-        # Get existing transcript
-        transcript = (
-            self.db.query(Transcript)
-            .filter(Transcript.conversation_id == conversation_id)
-            .first()
-        )
-
-        if not transcript:
-            # Create new transcript if none exists
-            transcript = Transcript(conversation_id=conversation_id, content="")
-            self.db.add(transcript)
-
-        # Format the new content with timestamp and speaker
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_line = f"[{timestamp}] {speaker.upper()}: {content}\n"
-
-        # Append to existing content
-        transcript.content = (transcript.content or "") + new_line
-        transcript.updated_at = datetime.now()
-
-        self.db.commit()
+        message_service = MessageService(self.db)
+        message_service.add_message(conversation_id, role, content, audio_file_path)
         return True
 
-    def get_transcript_content(self, conversation_id: str) -> Optional[str]:
-        """Get the full transcript content for a conversation"""
-        transcript = (
-            self.db.query(Transcript)
-            .filter(Transcript.conversation_id == conversation_id)
-            .first()
+    def get_conversation_messages(self, conversation_id: str) -> List[Message]:
+        """Get all messages for a conversation"""
+        return (
+            self.db.query(Message)
+            .filter(Message.conversation_id == conversation_id, Message.active)
+            .order_by(Message.sequence_number)
+            .all()
         )
 
-        return transcript.content if transcript else None
+    def update_conversation_summary(self, conversation_id: str, summary: str) -> bool:
+        """Update conversation with AI-generated summary"""
+        try:
+            conversation = (
+                self.db.query(Conversation)
+                .filter(Conversation.id == conversation_id, Conversation.active)
+                .first()
+            )
+
+            if conversation:
+                conversation.summary = summary
+                conversation.updated_at = datetime.now()
+                self.db.commit()
+                print(f"📝 Updated conversation {conversation_id} with summary")
+                return True
+            else:
+                print(f"⚠️ Conversation {conversation_id} not found for summary update")
+                return False
+
+        except Exception as e:
+            print(f"❌ Error updating conversation summary: {str(e)}")
+            self.db.rollback()
+            return False
 
     def get_tenant_conversations(
         self, tenant_id: str, limit: int = 50, offset: int = 0

@@ -37,7 +37,7 @@ class UserCreate(BaseModel):
 class AgentCreate(BaseModel):
     tenant_id: str
     name: str
-    phone_number: str
+    phone_number: Optional[str] = None
     greeting: Optional[str] = "Hello! How can I help you today?"
     voice_model: str = "aura-2-thalia-en"
     system_prompt: Optional[str] = "You are a helpful AI assistant."
@@ -195,15 +195,16 @@ async def create_agent(agent: AgentCreate, db: Session = Depends(get_db)):
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found or inactive")
 
-    # Check if phone number is already in use
-    existing_agent = (
-        db.query(Agent)
-        .filter(Agent.phone_number == agent.phone_number, Agent.active)
-        .first()
-    )
+    # Check if phone number is already in use (only if phone number is provided)
+    if agent.phone_number:
+        existing_agent = (
+            db.query(Agent)
+            .filter(Agent.phone_number == agent.phone_number, Agent.active)
+            .first()
+        )
 
-    if existing_agent:
-        raise HTTPException(status_code=400, detail="Phone number already in use")
+        if existing_agent:
+            raise HTTPException(status_code=400, detail="Phone number already in use")
 
     db_agent = Agent(
         tenant_id=agent.tenant_id,

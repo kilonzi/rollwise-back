@@ -1,51 +1,22 @@
+from __future__ import annotations
+
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from app.models import Agent, Tenant
-from app.config.agent_templates import AgentTemplates
+from app.utils.agent_config_builder import AgentConfigBuilder
 
 
 class AgentService:
     """Service for managing AI agents and their configurations"""
 
-    def build_agent_config(self, agent: Agent) -> Dict[str, Any]:
+    @staticmethod
+    def build_agent_config(agent: Agent) -> Dict[str, Any]:
         """Build Deepgram agent configuration from database agent record"""
+        return AgentConfigBuilder.build_agent_config(agent)
 
-        # Determine industry based on agent or tenant info
-        industry = "business_service"  # Default
-
-        # You could add logic here to determine industry from agent.tools or other fields
-        # For now, using a simple mapping or default
-        if hasattr(agent, 'tenant') and agent.tenant:
-            business_type = agent.tenant.business_type
-            if business_type:
-                # Map business types to industries
-                business_type_lower = business_type.lower()
-                if "salon" in business_type_lower or "beauty" in business_type_lower:
-                    industry = "salon"
-                elif "restaurant" in business_type_lower or "food" in business_type_lower:
-                    industry = "restaurant"
-                elif "health" in business_type_lower or "medical" in business_type_lower:
-                    industry = "healthcare"
-                elif "retail" in business_type_lower or "store" in business_type_lower:
-                    industry = "retail"
-                elif "tech" in business_type_lower or "support" in business_type_lower:
-                    industry = "tech_support"
-
-        # Get company name from tenant
-        company_name = agent.tenant.name if agent.tenant else "Your Business"
-
-        # Create agent template
-        template = AgentTemplates(
-            industry=industry,
-            voiceModel=agent.voice_model,
-            company_name=company_name
-        )
-
-        # Get configuration for this specific agent
-        return template.get_config_for_agent(agent)
-
-    def get_agent_by_phone(self, db: Session, phone_number: str) -> Agent:
+    @staticmethod
+    def get_agent_by_phone(db: Session, phone_number: str) -> type[Agent] | None:
         """Get agent by phone number with active tenant check"""
         return (
             db.query(Agent)
@@ -58,7 +29,8 @@ class AgentService:
             .first()
         )
 
-    def get_agent_by_id(self, db: Session, agent_id: str) -> Agent:
+    @staticmethod
+    def get_agent_by_id(db: Session, agent_id: str) -> type[Agent] | None:
         """Get agent by ID with active tenant check"""
         return (
             db.query(Agent)
@@ -66,3 +38,47 @@ class AgentService:
             .filter(Agent.id == agent_id, Agent.active, Tenant.active)
             .first()
         )
+
+    @staticmethod
+    def assign_phone_number(db: Session, agent_id: str, phone_number: str) -> Dict[str, Any]:
+        """Assign a phone number to an agent"""
+        try:
+            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+            if not agent:
+                return {"success": False, "error": "Agent not found"}
+
+            # Check if phone number is already in use
+            existing_agent = db.query(Agent).filter(
+                Agent.phone_number == phone_number,
+                Agent.active == True,
+                Agent.id != agent_id
+            ).first()
+            if existing_agent:
+                return {"success": False, "error": "Phone number already in use"}
+
+            agent.phone_number = phone_number
+            db.commit()
+
+            return {
+                "success": True,
+                "message": "Phone number assigned successfully",
+                "agent_id": agent.id,
+                "phone_number": phone_number
+            }
+
+        except Exception as e:
+            db.rollback()
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def get_agents_without_phone(db: Session, tenant_id: str = None) -> list[Agent]:
+        """Get agents that don't have phone numbers assigned"""
+        query = db.query(Agent).filter(
+            Agent.phone_number.is_(None),
+            Agent.active == True
+        )
+
+        if tenant_id:
+            query = query.filter(Agent.tenant_id == tenant_id)
+
+        return query.all()

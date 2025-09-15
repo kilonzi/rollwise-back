@@ -34,7 +34,7 @@ class Tenant(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    users = relationship("User", back_populates="tenant")
+    user_tenants = relationship("UserTenant", back_populates="tenant")
     agents = relationship("Agent", back_populates="tenant")
     conversations = relationship("Conversation", back_populates="tenant")
 
@@ -43,17 +43,39 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
-    role = Column(String, default="user")  # admin, user, agent_manager
+    global_role = Column(String, default="user")  # user, platform_admin
+    access_token = Column(String, nullable=True)
+    refresh_token = Column(String, nullable=True)
+    reset_token = Column(String, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+    last_login = Column(DateTime, nullable=True)
+    email_verified = Column(Boolean, default=False)
+    email_verification_token = Column(String, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    tenant = relationship("Tenant", back_populates="users")
+    user_tenants = relationship("UserTenant", back_populates="user")
+
+
+class UserTenant(Base):
+    __tablename__ = "user_tenants"
+
+    user_id = Column(String, ForeignKey('users.id'), primary_key=True)
+    tenant_id = Column(String, ForeignKey('tenants.id'), primary_key=True)
+    role = Column(String, default='user')  # owner, user, platform_admin
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user = relationship("User")
+    tenant = relationship("Tenant")
 
 
 class Agent(Base):
@@ -62,7 +84,7 @@ class Agent(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     name = Column(String, nullable=False)
-    phone_number = Column(String, unique=True, nullable=False)
+    phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
     voice_model = Column(String, default="aura-2-thalia-en")
     system_prompt = Column(Text, default="You are a helpful AI assistant.")
@@ -91,6 +113,7 @@ class Conversation(Base):
     started_at = Column(DateTime, default=func.now())
     ended_at = Column(DateTime, nullable=True)
     duration_seconds = Column(String, nullable=True)
+    summary = Column(Text, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -98,24 +121,26 @@ class Conversation(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="conversations")
     agent = relationship("Agent", back_populates="conversations")
-    transcript = relationship(
-        "Transcript", back_populates="conversation", uselist=False
-    )
+    messages = relationship("Message", back_populates="conversation", order_by="Message.sequence_number")
     tool_calls = relationship("ToolCall", back_populates="conversation")
 
 
-class Transcript(Base):
-    __tablename__ = "transcripts"
+class Message(Base):
+    __tablename__ = "messages"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
-    content = Column(Text, nullable=False)  # Full transcript as text
+    role = Column(String, nullable=False)  # "user" or "assistant"
+    content = Column(Text, nullable=False)  # Message content
+    audio_file_path = Column(String, nullable=True)  # Path to audio file for this message
+    sequence_number = Column(Integer, nullable=False)  # For chronological ordering
+    message_type = Column(String, default="conversation")  # conversation, system, etc.
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    conversation = relationship("Conversation", back_populates="transcript")
+    conversation = relationship("Conversation", back_populates="messages")
 
 
 class ToolCall(Base):
@@ -149,6 +174,7 @@ class BusinessDataset(Base):
     record_count: int = Column(Integer, default=0)  # number of records processed
     uploaded_at: Column = Column(DateTime, default=func.now())
     processed_at: Column = Column(DateTime, nullable=True)  # when ChromaDB ingestion completed
+    columns: list = Column(JSON, default=list)  # critical columns to include as metadata
     extra_info: dict = Column(JSON, default=dict)  # additional metadata
     active: bool = Column(Boolean, default=True)
     created_at: Column = Column(DateTime, default=func.now())

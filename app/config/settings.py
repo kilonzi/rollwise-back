@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Google Cloud Configuration
     GCP_PROJECT: str = os.getenv("GCP_PROJECT", "")
     GCP_REGION: str = os.getenv("GCP_REGION", "us-central1")
+    GEMINI_LLM_MODEL: str = os.getenv("GEMINI_LLM_MODEL", "gemini-2.0-flash")
 
     # Voice Configuration
     VOICE: str = os.getenv("VOICE", "aura-2-thalia-en")

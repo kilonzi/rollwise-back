@@ -23,7 +23,7 @@ class BusinessDatasetService:
     def client(self):
         """Lazy initialization of ChromaDB client"""
         if self._client is None:
-            self._client = chromadb.Client()
+            self._client = chromadb.PersistentClient(path="store/chroma")
         return self._client
 
     @property
@@ -41,7 +41,8 @@ class BusinessDatasetService:
             file_path: str,
             file_name: str,
             file_type: str,
-            extra_info: Optional[Dict[str, Any]] = None
+            extra_info: Optional[Dict[str, Any]] = None,
+            columns: Optional[List[str]] = None
     ) -> BusinessDataset:
         """Upload and process a dataset file"""
 
@@ -53,7 +54,8 @@ class BusinessDatasetService:
             file_name=file_name,
             file_path=file_path,
             file_type=file_type,
-            extra_info=extra_info or {}
+            columns=columns or [],
+            extra_info={**(extra_info or {}), **({"columns": columns} if columns else {})}
         )
 
         self.db.add(dataset)
@@ -85,6 +87,19 @@ class BusinessDatasetService:
 
         return dataset
 
+    def _normalize_key(self, key: Any) -> str:
+        """Safely normalize a key to a lowercase underscore string."""
+        try:
+            s = str(key) if key is not None else ""
+            s = s.strip().lower()
+            # Replace spaces and non-alphanumeric with underscores
+            import re
+            s = re.sub(r"[^a-z0-9]+", "_", s)
+            s = s.strip("_")
+            return s or "field"
+        except Exception:
+            return "field"
+
     def _ingest_csv(self, dataset: BusinessDataset) -> int:
         """Ingest a CSV into ChromaDB, each row becomes a document"""
         record_count = 0
@@ -95,6 +110,12 @@ class BusinessDatasetService:
             documents = []
             metadatas = []
             ids = []
+
+            # Precompute normalized selected columns if provided
+            selected_columns = None
+            if getattr(dataset, 'columns', None):
+                # Use set of normalized column names for quick filter
+                selected_columns = {self._normalize_key(c) for c in (dataset.columns or []) if c is not None}
 
             for row in reader:
                 if not any(row.values()):  # Skip empty rows
@@ -107,10 +128,20 @@ class BusinessDatasetService:
                     "dataset_id": str(dataset.id)
                 }
 
-                # Add all row values as metadata (opportunistically)
+                # Add row values as metadata but only the selected columns if provided
                 for k, v in row.items():
-                    if v and k:  # Only add non-empty values
-                        metadata[k.lower().replace(" ", "_")] = str(v)
+                    if v is None:
+                        continue
+                    norm_key = self._normalize_key(k)
+                    if not norm_key:
+                        continue
+                    if selected_columns is not None and norm_key not in selected_columns:
+                        continue
+                    try:
+                        metadata[norm_key] = str(v)
+                    except Exception:
+                        # Fallback safe stringify
+                        metadata[norm_key] = f"{v}"
 
                 # Create document text from the row
                 doc_text = self._create_document_text(row, dataset.label)
@@ -294,7 +325,7 @@ class BusinessDatasetService:
                 "$and": [
                     {"tenant_id": {"$eq": tenant_id}},
                     {"agent_id": {"$eq": agent_id}},
-                    {"type": {"$eq": label}}
+                    {"type": {"$eq": label}} if label else {}
                 ]
             }
 
@@ -305,7 +336,8 @@ class BusinessDatasetService:
             results = self.collection.query(
                 query_texts=query_texts,
                 n_results=n_results,
-                where=where_clause
+                where=where_clause,
+                include=['documents']
             )
 
             return {

@@ -63,7 +63,32 @@ async def search_agent_dataset_tool(
         }
 
 
+async def hangup_function(reason: str = "conversation_complete") -> Dict[str, Any]:
+    """
+    Signal to end the conversation and close the connection.
+
+    Use this function when:
+    - The conversation has naturally concluded
+    - User hasn't responded after asking "Are you there?" or similar
+    - User explicitly says goodbye or indicates they want to end the call
+    - You've provided all requested information and no further assistance is needed
+
+    Args:
+        reason: Brief reason for hanging up (e.g., "conversation_complete", "user_inactive", "user_goodbye")
+
+    Returns:
+        Success confirmation that will trigger connection closure
+    """
+    return {
+        "success": True,
+        "action": "hangup",
+        "reason": reason,
+        "message": f"Ending conversation: {reason}"
+    }
+
+
 # Map function names to their implementations
 FUNCTION_MAP = {
     "search_agent_dataset": search_agent_dataset_tool,
+    "hangup_function": hangup_function,
 }

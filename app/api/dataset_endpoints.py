@@ -14,7 +14,7 @@ from app.services.business_dataset_service import BusinessDatasetService
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 # Create uploads directory if it doesn't exist
-UPLOAD_DIR = "uploads/datasets"
+UPLOAD_DIR = "store/uploads/datasets"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
