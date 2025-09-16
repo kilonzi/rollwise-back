@@ -51,6 +51,31 @@ class UserTenantAssociation(BaseModel):
     role: str = "user"
 
 
+class AgentUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    greeting: Optional[str] = None
+    system_prompt: Optional[str] = None
+    voice_model: Optional[str] = None
+    conversation_starters: Optional[List[str]] = None
+    max_duration: Optional[int] = None
+
+    class Config:
+        # Prevent additional fields
+        extra = "forbid"
+
+
+class AgentCreateRequest(BaseModel):
+    name: str
+    greeting: str
+    system_prompt: str
+    voice_model: str = "aura-2-thalia-en"
+    conversation_starters: Optional[List[str]] = []
+    max_duration: Optional[int] = 300
+
+    class Config:
+        extra = "forbid"
+
+
 class UserResponse(BaseModel):
     id: str
     name: str
@@ -431,7 +456,7 @@ async def create_tenant_agent(
 async def update_tenant_agent(
     tenant_id: str,
     agent_id: str,
-    agent_data: dict,
+    agent_data: AgentUpdateRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -467,14 +492,16 @@ async def update_tenant_agent(
             detail="Agent not found"
         )
     
-    # Update agent fields
+    # Update agent fields safely using validated Pydantic model
     try:
-        for field, value in agent_data.items():
-            if hasattr(agent, field) and field not in ['id', 'tenant_id', 'created_at']:
+        agent_dict = agent_data.dict(exclude_unset=True)
+        for field, value in agent_dict.items():
+            if value is not None:  # Only update fields that were provided
                 setattr(agent, field, value)
-        
+
         agent.updated_at = datetime.utcnow()
         db.commit()
+        db.refresh(agent)
         
         return {
             "message": "Agent updated successfully",

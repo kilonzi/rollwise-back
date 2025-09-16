@@ -18,7 +18,11 @@ class Settings(BaseSettings):
     # External URLs
     BASE_URL: str = os.getenv("BASE_URL", "yourdomain.com")
 
-    # API Keys
+    # Security
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+
+    # API Keys - Required
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -41,12 +45,21 @@ class Settings(BaseSettings):
     # Business Configuration
     BUSINESS_NAME: str = os.getenv("BUSINESS_NAME", "Your Business")
 
-    # Validation - ensure required variables are set
-    if not DEEPGRAM_API_KEY:
-        print("⚠️  Warning: DEEPGRAM_API_KEY not set")
+    def __post_init__(self):
+        """Validate required settings after initialization"""
+        if not self.SECRET_KEY:
+            raise ValueError("SECRET_KEY environment variable is required for security")
 
-    if BASE_URL == "yourdomain.com":
-        print("⚠️  Warning: BASE_URL not configured - update with your domain/ngrok URL")
+        if not self.DEEPGRAM_API_KEY:
+            raise ValueError("DEEPGRAM_API_KEY is required for speech processing")
+
+        if self.BASE_URL == "yourdomain.com":
+            raise ValueError("BASE_URL must be configured with your domain/ngrok URL")
+
+        # Validate SECRET_KEY strength
+        if len(self.SECRET_KEY) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
 
 
 settings = Settings()
+settings.__post_init__()

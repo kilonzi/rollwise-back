@@ -186,7 +186,22 @@ class BusinessDataset(Base):
 
 
 # Database setup
-engine = create_engine(settings.DATABASE_URL, echo=False)
+# Database setup with connection pooling
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,  # Validate connections before use
+    "pool_recycle": 300,    # Recycle connections every 5 minutes
+}
+
+# Add connection pooling for non-SQLite databases
+if not settings.DATABASE_URL.startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_size": 20,        # Connection pool size
+        "max_overflow": 30,     # Max connections beyond pool_size
+        "pool_timeout": 30,     # Timeout for getting connection
+    })
+
+engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -196,10 +211,13 @@ def create_tables():
 
 
 def get_db():
-    """Database dependency for FastAPI"""
+    """Database dependency for FastAPI with enhanced error handling"""
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 

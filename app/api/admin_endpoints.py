@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -92,9 +92,16 @@ async def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
         address=tenant.address,
     )
 
-    db.add(db_tenant)
-    db.commit()
-    db.refresh(db_tenant)
+    try:
+        db.add(db_tenant)
+        db.commit()
+        db.refresh(db_tenant)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create tenant"
+        )
 
     return TenantResponse(
         id=db_tenant.id,
@@ -217,9 +224,16 @@ async def create_agent(agent: AgentCreate, db: Session = Depends(get_db)):
         tools=agent.tools,
     )
 
-    db.add(db_agent)
-    db.commit()
-    db.refresh(db_agent)
+    try:
+        db.add(db_agent)
+        db.commit()
+        db.refresh(db_agent)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create agent"
+        )
 
     return AgentResponse(
         id=db_agent.id,

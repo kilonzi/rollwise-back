@@ -13,8 +13,8 @@ from app.config.settings import settings
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT configuration
-SECRET_KEY = getattr(settings, 'SECRET_KEY', 'your-secret-key-here')
+# JWT configuration - SECRET_KEY now required in settings
+SECRET_KEY = settings.SECRET_KEY  # Will raise error if not set
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -368,24 +368,26 @@ class UserService:
 
     @staticmethod
     def get_user_tenants(db: Session, user_id: str) -> Dict[str, Any]:
-        """Get all tenants associated with a user"""
+        """Get all tenants associated with a user - optimized with JOIN"""
         try:
-            user_tenants = db.query(UserTenant).filter(
+            # Use JOIN to avoid N+1 query problem
+            user_tenants = db.query(UserTenant, Tenant).join(
+                Tenant, UserTenant.tenant_id == Tenant.id
+            ).filter(
                 UserTenant.user_id == user_id,
-                UserTenant.active == True
+                UserTenant.active == True,
+                Tenant.active == True
             ).all()
 
             tenants = []
-            for ut in user_tenants:
-                tenant = db.query(Tenant).filter(Tenant.id == ut.tenant_id, Tenant.active == True).first()
-                if tenant:
-                    tenants.append({
-                        "tenant_id": tenant.id,
-                        "tenant_name": tenant.name,
-                        "business_type": tenant.business_type,
-                        "role": ut.role,
-                        "joined_at": ut.created_at.isoformat()
-                    })
+            for ut, tenant in user_tenants:
+                tenants.append({
+                    "tenant_id": tenant.id,
+                    "tenant_name": tenant.name,
+                    "business_type": tenant.business_type,
+                    "role": ut.role,
+                    "joined_at": ut.created_at.isoformat()
+                })
 
             return {
                 "success": True,
@@ -398,26 +400,28 @@ class UserService:
 
     @staticmethod
     def get_tenant_users(db: Session, tenant_id: str) -> Dict[str, Any]:
-        """Get all users associated with a tenant"""
+        """Get all users associated with a tenant - optimized with JOIN"""
         try:
-            user_tenants = db.query(UserTenant).filter(
+            # Use JOIN to avoid N+1 query problem
+            user_tenants = db.query(UserTenant, User).join(
+                User, UserTenant.user_id == User.id
+            ).filter(
                 UserTenant.tenant_id == tenant_id,
-                UserTenant.active == True
+                UserTenant.active == True,
+                User.active == True
             ).all()
 
             users = []
-            for ut in user_tenants:
-                user = db.query(User).filter(User.id == ut.user_id, User.active == True).first()
-                if user:
-                    users.append({
-                        "user_id": user.id,
-                        "name": user.name,
-                        "email": user.email,
-                        "phone_number": user.phone_number,
-                        "role": ut.role,
-                        "joined_at": ut.created_at.isoformat(),
-                        "last_login": user.last_login.isoformat() if user.last_login else None
-                    })
+            for ut, user in user_tenants:
+                users.append({
+                    "user_id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "phone_number": user.phone_number,
+                    "role": ut.role,
+                    "joined_at": ut.created_at.isoformat(),
+                    "last_login": user.last_login.isoformat() if user.last_login else None
+                })
 
             return {
                 "success": True,
