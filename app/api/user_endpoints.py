@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 import os
 
@@ -53,9 +53,27 @@ class UserTenantAssociation(BaseModel):
 
 class AgentUpdateRequest(BaseModel):
     name: Optional[str] = None
+    phone_number: Optional[str] = None
     greeting: Optional[str] = None
     system_prompt: Optional[str] = None
     voice_model: Optional[str] = None
+    language: Optional[str] = None
+    tools: Optional[List[str]] = None
+
+    # Calendar Integration fields
+    calendar_id: Optional[str] = None  # Google Calendar ID
+    business_hours: Optional[Dict[str, Any]] = None  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
+    default_slot_duration: Optional[int] = None
+    max_daily_appointments: Optional[int] = None
+    buffer_time: Optional[int] = None
+    blocked_dates: Optional[List[str]] = None  # ["2024-12-25", "2024-01-01"]
+    invitees: Optional[List[Dict[str, Any]]] = None  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}]
+    booking_enabled: Optional[bool] = None  # Whether calendar booking is enabled
+
+    # Administrative fields
+    active: Optional[bool] = None  # Whether agent is active
+
+    # Legacy fields for compatibility
     conversation_starters: Optional[List[str]] = None
     max_duration: Optional[int] = None
 
@@ -115,12 +133,28 @@ class AgentChatQuery(BaseModel):
 
 class AgentResponse(BaseModel):
     id: str
+    tenant_id: str
     name: str
     phone_number: Optional[str]
+    greeting: str
+    system_prompt: str
     voice_model: str
     language: str
+    tools: Optional[List[str]] = None
+
+    # Calendar Integration fields
+    calendar_id: Optional[str] = None
+    business_hours: Optional[Dict[str, Any]] = None
+    default_slot_duration: Optional[int] = None
+    max_daily_appointments: Optional[int] = None
+    buffer_time: Optional[int] = None
+    blocked_dates: Optional[List[str]] = None
+    invitees: Optional[List[Dict[str, Any]]] = None
+    booking_enabled: Optional[bool] = None
+
     active: bool
     created_at: datetime
+    updated_at: datetime
 
 
 # Authentication dependency
@@ -452,7 +486,7 @@ async def create_tenant_agent(
         )
 
 
-@router.put("/tenants/{tenant_id}/agents/{agent_id}")
+@router.put("/tenants/{tenant_id}/agents/{agent_id}", response_model=AgentResponse)
 async def update_tenant_agent(
     tenant_id: str,
     agent_id: str,
@@ -502,11 +536,8 @@ async def update_tenant_agent(
         agent.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(agent)
-        
-        return {
-            "message": "Agent updated successfully",
-            "agent_id": agent.id
-        }
+
+        return agent
         
     except Exception as e:
         db.rollback()

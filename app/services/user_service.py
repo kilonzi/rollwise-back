@@ -1,14 +1,14 @@
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from typing import Optional, Dict, Any
 
-from app.models import User, Tenant, UserTenant
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+
 from app.config.settings import settings
+from app.models import User, Tenant, UserTenant
 
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -16,7 +16,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # JWT configuration - SECRET_KEY now required in settings
 SECRET_KEY = settings.SECRET_KEY  # Will raise error if not set
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 5
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
@@ -46,7 +46,7 @@ class UserService:
             expire = datetime.utcnow() + expires_delta
         else:
             expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        
+
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
@@ -71,13 +71,13 @@ class UserService:
 
     @staticmethod
     def register_user(
-        db: Session,
-        name: str,
-        email: str,
-        password: str,
-        phone_number: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        role: str = "user"
+            db: Session,
+            name: str,
+            email: str,
+            password: str,
+            phone_number: Optional[str] = None,
+            tenant_id: Optional[str] = None,
+            role: str = "user"
     ) -> Dict[str, Any]:
         """Register a new user"""
         try:

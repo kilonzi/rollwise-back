@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -47,11 +47,23 @@ class AgentCreate(BaseModel):
 
 class AgentUpdate(BaseModel):
     name: Optional[str] = None
+    phone_number: Optional[str] = None
     greeting: Optional[str] = None
     voice_model: Optional[str] = None
     system_prompt: Optional[str] = None
     language: Optional[str] = None
     tools: Optional[List[str]] = None
+
+    # Calendar Integration fields
+    calendar_id: Optional[str] = None  # Google Calendar ID
+    business_hours: Optional[Dict[str, Any]] = None  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
+    default_slot_duration: Optional[int] = None
+    max_daily_appointments: Optional[int] = None
+    buffer_time: Optional[int] = None
+    blocked_dates: Optional[List[str]] = None  # ["2024-12-25", "2024-01-01"]
+    invitees: Optional[List[Dict[str, Any]]] = None  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}]
+    booking_enabled: Optional[bool] = None  # Whether calendar booking is enabled
+
     active: Optional[bool] = None
 
 
@@ -70,11 +82,26 @@ class AgentResponse(BaseModel):
     id: str
     tenant_id: str
     name: str
-    phone_number: str
+    phone_number: Optional[str]
     greeting: str
+    system_prompt: str
     voice_model: str
+    language: str
+    tools: Optional[List[str]] = None
+
+    # Calendar Integration fields
+    calendar_id: Optional[str] = None
+    business_hours: Optional[Dict[str, Any]] = None
+    default_slot_duration: Optional[int] = None
+    max_daily_appointments: Optional[int] = None
+    buffer_time: Optional[int] = None
+    blocked_dates: Optional[List[str]] = None
+    invitees: Optional[List[Dict[str, Any]]] = None
+    booking_enabled: Optional[bool] = None
+
     active: bool
     created_at: str
+    updated_at: str
 
     class Config:
         from_attributes = True
@@ -241,7 +268,16 @@ async def create_agent(agent: AgentCreate, db: Session = Depends(get_db)):
         name=db_agent.name,
         phone_number=db_agent.phone_number,
         greeting=db_agent.greeting,
+        system_prompt=db_agent.system_prompt,
         voice_model=db_agent.voice_model,
+        language=db_agent.language,
+        tools=db_agent.tools,
+        calendar_id=db_agent.calendar_id,
+        business_hours=db_agent.business_hours,
+        default_slot_duration=db_agent.default_slot_duration,
+        max_daily_appointments=db_agent.max_daily_appointments,
+        buffer_time=db_agent.buffer_time,
+        blocked_dates=db_agent.blocked_dates,
         active=db_agent.active,
         created_at=db_agent.created_at.isoformat(),
     )
@@ -271,7 +307,16 @@ async def list_agents(
             name=a.name,
             phone_number=a.phone_number,
             greeting=a.greeting,
+            system_prompt=a.system_prompt,
             voice_model=a.voice_model,
+            language=a.language,
+            tools=a.tools,
+            calendar_id=a.calendar_id,
+            business_hours=a.business_hours,
+            default_slot_duration=a.default_slot_duration,
+            max_daily_appointments=a.max_daily_appointments,
+            buffer_time=a.buffer_time,
+            blocked_dates=a.blocked_dates,
             active=a.active,
             created_at=a.created_at.isoformat(),
         )
@@ -293,7 +338,16 @@ async def get_agent(agent_id: str, db: Session = Depends(get_db)):
         name=agent.name,
         phone_number=agent.phone_number,
         greeting=agent.greeting,
+        system_prompt=agent.system_prompt,
         voice_model=agent.voice_model,
+        language=agent.language,
+        tools=agent.tools,
+        calendar_id=agent.calendar_id,
+        business_hours=agent.business_hours,
+        default_slot_duration=agent.default_slot_duration,
+        max_daily_appointments=agent.max_daily_appointments,
+        buffer_time=agent.buffer_time,
+        blocked_dates=agent.blocked_dates,
         active=agent.active,
         created_at=agent.created_at.isoformat(),
     )
@@ -312,6 +366,8 @@ async def update_agent(
     # Update fields if provided
     if agent_update.name is not None:
         agent.name = agent_update.name
+    if agent_update.phone_number is not None:
+        agent.phone_number = agent_update.phone_number
     if agent_update.greeting is not None:
         agent.greeting = agent_update.greeting
     if agent_update.voice_model is not None:
@@ -322,6 +378,19 @@ async def update_agent(
         agent.language = agent_update.language
     if agent_update.tools is not None:
         agent.tools = agent_update.tools
+
+    # Calendar Integration fields
+    if agent_update.business_hours is not None:
+        agent.business_hours = agent_update.business_hours
+    if agent_update.default_slot_duration is not None:
+        agent.default_slot_duration = agent_update.default_slot_duration
+    if agent_update.max_daily_appointments is not None:
+        agent.max_daily_appointments = agent_update.max_daily_appointments
+    if agent_update.buffer_time is not None:
+        agent.buffer_time = agent_update.buffer_time
+    if agent_update.blocked_dates is not None:
+        agent.blocked_dates = agent_update.blocked_dates
+
     if agent_update.active is not None:
         agent.active = agent_update.active
 
@@ -334,7 +403,16 @@ async def update_agent(
         name=agent.name,
         phone_number=agent.phone_number,
         greeting=agent.greeting,
+        system_prompt=agent.system_prompt,
         voice_model=agent.voice_model,
+        language=agent.language,
+        tools=agent.tools,
+        calendar_id=agent.calendar_id,
+        business_hours=agent.business_hours,
+        default_slot_duration=agent.default_slot_duration,
+        max_daily_appointments=agent.max_daily_appointments,
+        buffer_time=agent.buffer_time,
+        blocked_dates=agent.blocked_dates,
         active=agent.active,
         created_at=agent.created_at.isoformat(),
     )

@@ -90,6 +90,17 @@ class Agent(Base):
     system_prompt = Column(Text, default="You are a helpful AI assistant.")
     language = Column(String, default="en")
     tools = Column(JSON, default=list)  # List of enabled tool names
+
+    # Calendar Integration
+    calendar_id = Column(String, nullable=True)  # Google Calendar ID
+    business_hours = Column(JSON, nullable=True)  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
+    default_slot_duration = Column(Integer, default=30)  # minutes
+    max_daily_appointments = Column(Integer, default=8)
+    buffer_time = Column(Integer, default=15)  # minutes between appointments
+    blocked_dates = Column(JSON, nullable=True)  # ["2024-12-25", "2024-01-01"] - dates when agent is unavailable
+    invitees = Column(JSON, nullable=True)  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
+    booking_enabled = Column(Boolean, default=True)  # Whether calendar booking is enabled for this agent
+
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

@@ -2,6 +2,13 @@ import inspect
 from typing import Dict, Callable, Any, List
 
 from app.models.database import get_db, ToolCall
+from app.tools.calendar_tools import (
+    create_calendar_event_function,
+    cancel_calendar_event_function,
+    search_calendar_events_function,
+    update_calendar_event_function,
+    list_calendar_events_function
+)
 
 
 class ToolRegistry:
@@ -120,3 +127,26 @@ def tool(name: str, description: str = "", parameters: Dict[str, Any] = None):
         return func
 
     return decorator
+
+
+# Global registry instance
+global_registry = ToolRegistry()
+
+# Calendar tool definitions
+CALENDAR_TOOLS = {
+    "create_calendar_event": create_calendar_event_function(),
+    "cancel_calendar_event": cancel_calendar_event_function(),
+    "search_calendar_events": search_calendar_events_function(),
+    "update_calendar_event": update_calendar_event_function(),
+    "list_calendar_events": list_calendar_events_function()
+}
+
+def get_calendar_tool_definitions() -> List[Dict[str, Any]]:
+    """Get all calendar tool definitions"""
+    return list(CALENDAR_TOOLS.values())
+
+def get_tool_definition(tool_name: str) -> Dict[str, Any]:
+    """Get definition for a specific tool"""
+    if tool_name in CALENDAR_TOOLS:
+        return CALENDAR_TOOLS[tool_name]
+    return global_registry.tool_descriptions.get(tool_name, {})

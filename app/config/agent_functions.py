@@ -1,8 +1,10 @@
 from typing import Dict, Any
 from app.services.business_dataset_service import search_agent_dataset
+from app.tools.calendar_tools import CalendarTools
+from app.models.database import get_db_session
 
 
-async def search_agent_dataset_tool(
+async def search_business_knowledge_base_tool(
     tenant_id: str,
     agent_id: str,
     label: str,
@@ -10,7 +12,7 @@ async def search_agent_dataset_tool(
     top_k: int = 5,
     return_all: bool = False
 ) -> Dict[str, Any]:
-    """Search agent datasets using ChromaDB"""
+    """Search business knowledge base using ChromaDB (for static business information only, NOT appointments)"""
     try:
         result = search_agent_dataset(
             tenant_id=tenant_id,
@@ -88,7 +90,39 @@ async def hangup_function(reason: str = "conversation_complete") -> Dict[str, An
 
 
 # Map function names to their implementations
+# Calendar tool wrapper functions for agent use
+async def create_calendar_event_tool(**kwargs) -> Dict[str, Any]:
+    """Create calendar event wrapper for agent use"""
+    db_session = get_db_session()
+    try:
+        calendar_tools = CalendarTools(db_session)
+        return calendar_tools.create_calendar_event(**kwargs)
+    finally:
+        db_session.close()
+
+async def list_calendar_events_tool(**kwargs) -> Dict[str, Any]:
+    """List calendar events wrapper for agent use"""
+    db_session = get_db_session()
+    try:
+        calendar_tools = CalendarTools(db_session)
+        return calendar_tools.list_calendar_events(**kwargs)
+    finally:
+        db_session.close()
+
+async def cancel_calendar_event_tool(**kwargs) -> Dict[str, Any]:
+    """Cancel calendar event wrapper for agent use"""
+    db_session = get_db_session()
+    try:
+        calendar_tools = CalendarTools(db_session)
+        return calendar_tools.cancel_calendar_event(**kwargs)
+    finally:
+        db_session.close()
+
 FUNCTION_MAP = {
-    "search_agent_dataset": search_agent_dataset_tool,
+    "search_business_knowledge_base": search_business_knowledge_base_tool,
+    "search_agent_dataset": search_business_knowledge_base_tool,  # Legacy alias for backward compatibility
+    "create_calendar_event": create_calendar_event_tool,
+    "list_calendar_events": list_calendar_events_tool,
+    "cancel_calendar_event": cancel_calendar_event_tool,
     "hangup_function": hangup_function,
 }

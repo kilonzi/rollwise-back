@@ -496,11 +496,16 @@ async def execute_tenant_tool(
         logger.info(f"Function call received: {tool_name}")
         logger.info(f"Parameters: {tool_args}")
 
-        # Add tenant and agent context for search_agent_dataset
-        if tool_name == "search_agent_dataset":
+        # Add tenant and agent context for knowledge base tools
+        if tool_name in ["search_agent_dataset", "search_business_knowledge_base"]:
             tool_args["tenant_id"] = conversation.tenant_id
             tool_args["agent_id"] = conversation.agent_id
-            print(f"🔧 Enhanced tool_args: {tool_args}")
+            print(f"🔧 Enhanced tool_args for knowledge base: {tool_args}")
+
+        # Add agent context for calendar tools
+        elif tool_name in ["create_calendar_event", "list_calendar_events", "cancel_calendar_event", "search_calendar_events", "update_calendar_event"]:
+            tool_args["agent_id"] = conversation.agent_id
+            print(f"🔧 Enhanced tool_args for calendar: {tool_args}")
 
         # Log tool call start to database
         tool_call = ToolCall(
@@ -516,9 +521,9 @@ async def execute_tenant_tool(
         tool_function = FUNCTION_MAP[tool_name]
         print(f"🔧 Found tool function: {tool_function}")
 
-        if tool_name == "search_agent_dataset":
-            # Call with explicit parameters
-            print("🔧 Calling search_agent_dataset with parameters:")
+        if tool_name in ["search_agent_dataset", "search_business_knowledge_base"]:
+            # Call with explicit parameters for knowledge base tools
+            print(f"🔧 Calling {tool_name} with parameters:")
             print(f"🔧   tenant_id: {tool_args.get('tenant_id')}")
             print(f"🔧   agent_id: {tool_args.get('agent_id')}")
             print(f"🔧   label: {tool_args.get('label')}")
@@ -532,7 +537,7 @@ async def execute_tenant_tool(
                 top_k=tool_args.get("top_k", 5),
                 return_all=tool_args.get("return_all", False)
             )
-            print(f"🔧 search_agent_dataset returned: {result}")
+            print(f"🔧 {tool_name} returned: {result}")
         elif tool_name == "hangup_function":
             # Special handling for hangup function
             print("🔧 Hangup function called - preparing to close connection")
@@ -613,11 +618,16 @@ async def handle_function_call_request(
         print(f"🔍 Function call received: {function_name} with ID: {function_call_id}")
         print(f"🔍 Raw parameters: {parameters}")
 
-        # Add tenant and agent context for search_agent_dataset
-        if function_name == "search_agent_dataset":
+        # Add tenant and agent context for knowledge base tools
+        if function_name in ["search_agent_dataset", "search_business_knowledge_base"]:
             parameters["tenant_id"] = conversation.tenant_id
             parameters["agent_id"] = conversation.agent_id
-            print(f"🔍 Enhanced parameters with context: {parameters}")
+            print(f"🔍 Enhanced parameters for knowledge base: {parameters}")
+
+        # Add agent context for calendar tools
+        elif function_name in ["create_calendar_event", "list_calendar_events", "cancel_calendar_event", "search_calendar_events", "update_calendar_event"]:
+            parameters["agent_id"] = conversation.agent_id
+            print(f"🔍 Enhanced parameters for calendar: {parameters}")
 
         # Execute the function using the existing execute_tenant_tool
         print(f"🔍 Executing function: {function_name}")

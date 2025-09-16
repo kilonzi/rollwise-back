@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
+    # Google Calendar Integration
+    GOOGLE_CALENDAR_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_PATH", "./credentials.json")
+    GOOGLE_CALENDAR_DOMAIN: str = os.getenv("GOOGLE_CALENDAR_DOMAIN", "")
+
     # Google Cloud Configuration
     GCP_PROJECT: str = os.getenv("GCP_PROJECT", "")
     GCP_REGION: str = os.getenv("GCP_REGION", "us-central1")

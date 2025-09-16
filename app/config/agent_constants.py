@@ -138,9 +138,11 @@ Remember: You control the conversation flow. Don't wait indefinitely - use the h
 # Function definitions that will be sent to the Voice Agent API
 FUNCTION_DEFINITIONS = [
     {
-        "name": "search_agent_dataset",
-        "description": """Search business datasets (clients, hours, inventory, pricing, policies, etc.).
-        Use this function when customers ask about specific business information.
+        "name": "search_business_knowledge_base",
+        "description": """Search static business information stored in knowledge databases (NOT for appointments/bookings).
+        Use this function when customers ask about general business information like hours, pricing, services, policies, etc.
+
+        IMPORTANT: This searches STATIC information only. For appointment booking, scheduling, or calendar management, use calendar tools instead.
 
         Dataset types available:
         - "clients": Customer contact information, names, phones, emails
@@ -154,6 +156,8 @@ FUNCTION_DEFINITIONS = [
         - Customer asks "Do you have John's number?" → use label="clients", query="John"
         - Customer asks "How much for a haircut?" → use label="pricing", query="haircut"
         - Customer asks "What services do you offer?" → use label="inventory", return_all=true
+
+        For appointments/bookings, use create_calendar_event, search_calendar_events, or list_calendar_events instead.
         """,
         "parameters": {
             "type": "object",
@@ -161,7 +165,7 @@ FUNCTION_DEFINITIONS = [
                 "label": {
                     "type": "string",
                     "description": "Dataset to search (clients, hours, inventory, pricing, policies, etc.)",
-                    "enum": ["clients", "hours", "pricing", "inventory", "policies", "services", "appointments"]
+                    "enum": ["clients", "hours", "pricing", "inventory", "policies", "services"]
                 },
                 "query": {
                     "type": "string",
@@ -179,6 +183,116 @@ FUNCTION_DEFINITIONS = [
                 }
             },
             "required": ["label"]
+        }
+    },
+    {
+        "name": "create_calendar_event",
+        "description": """Create a calendar appointment/booking for the agent.
+        Use this function when customers want to book, schedule, or make an appointment.
+
+        IMPORTANT: This is for CREATING new appointments. Always check available slots first before booking.
+
+        Examples:
+        - "I'd like to book an appointment"
+        - "Can I schedule a meeting for Tuesday?"
+        - "Book me for a 2pm slot tomorrow"
+        """,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "The agent's ID (automatically provided)"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Event title/summary"
+                },
+                "start_datetime": {
+                    "type": "string",
+                    "description": "Start time in ISO format (e.g., '2024-01-15T14:00:00')"
+                },
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": "Event duration in minutes",
+                    "default": 30
+                },
+                "client_name": {
+                    "type": "string",
+                    "description": "Client's name (optional)"
+                },
+                "client_phone": {
+                    "type": "string",
+                    "description": "Client's phone number (include if provided)"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Event description"
+                },
+                "location": {
+                    "type": "string",
+                    "description": "Event location"
+                }
+            },
+            "required": ["agent_id", "summary", "start_datetime"]
+        }
+    },
+    {
+        "name": "list_calendar_events",
+        "description": """List all appointments and available time slots for a date range.
+        Use this function when customers want to see availability or existing appointments.
+
+        Examples:
+        - "What appointments do you have this week?"
+        - "What slots are available tomorrow?"
+        - "Show me your schedule for next week"
+        """,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "The agent's ID (automatically provided)"
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Start date in ISO format (e.g., '2024-01-15')"
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date in ISO format (e.g., '2024-01-20')"
+                },
+                "include_cancelled": {
+                    "type": "boolean",
+                    "description": "Whether to include cancelled events",
+                    "default": False
+                }
+            },
+            "required": ["agent_id", "start_date", "end_date"]
+        }
+    },
+    {
+        "name": "cancel_calendar_event",
+        "description": """Cancel/remove a calendar appointment.
+        Use this function when customers want to cancel an existing appointment.
+
+        Examples:
+        - "I need to cancel my appointment"
+        - "Can you remove my Tuesday booking?"
+        """,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "The agent's ID (automatically provided)"
+                },
+                "event_id": {
+                    "type": "string",
+                    "description": "The Google Calendar event ID"
+                }
+            },
+            "required": ["agent_id", "event_id"]
         }
     },
     {

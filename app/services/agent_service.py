@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+import uuid
+from datetime import datetime
 
 from app.models import Agent, Tenant
 from app.utils.agent_config_builder import AgentConfigBuilder
+from app.services.calendar_service import CalendarService
+from app.utils.logging_config import app_logger
 
 
 class AgentService:
@@ -82,3 +86,130 @@ class AgentService:
             query = query.filter(Agent.tenant_id == tenant_id)
 
         return query.all()
+
+    @staticmethod
+    def create_agent_with_calendar(db: Session,
+                                 tenant_id: str,
+                                 name: str,
+                                 greeting: str,
+                                 system_prompt: str,
+                                 voice_model: str = "aura-2-thalia-en",
+                                 language: str = "en",
+                                 business_hours: Optional[Dict[str, Any]] = None,
+                                 default_slot_duration: int = 30,
+                                 max_daily_appointments: int = 8,
+                                 buffer_time: int = 15) -> Dict[str, Any]:
+        """Create a new agent with integrated calendar"""
+        try:
+            # Create agent record
+            agent_id = str(uuid.uuid4())
+
+            # Default business hours if not provided
+            if business_hours is None:
+                business_hours = {
+                    "start": "09:00",
+                    "end": "17:00",
+                    "timezone": "UTC",
+                    "days": [1, 2, 3, 4, 5]  # Monday to Friday
+                }
+
+            agent = Agent(
+                id=agent_id,
+                tenant_id=tenant_id,
+                name=name,
+                greeting=greeting,
+                system_prompt=system_prompt,
+                voice_model=voice_model,
+                language=language,
+                business_hours=business_hours,
+                default_slot_duration=default_slot_duration,
+                max_daily_appointments=max_daily_appointments,
+                buffer_time=buffer_time,
+                tools=["create_calendar_event", "cancel_calendar_event", "search_calendar_events",
+                       "update_calendar_event", "list_calendar_events"]  # Include calendar tools
+            )
+
+            # Add to database but don't commit yet
+            db.add(agent)
+            db.flush()  # Get the ID without committing
+
+            # Create Google Calendar for the agent
+            calendar_service = CalendarService()
+            try:
+                calendar_id = calendar_service.create_agent_calendar(agent_id, name)
+                agent.calendar_id = calendar_id
+                app_logger.info(f"Created calendar {calendar_id} for agent {agent_id}")
+            except Exception as calendar_error:
+                app_logger.warning(f"Failed to create calendar for agent {agent_id}: {str(calendar_error)}")
+                # Continue without calendar - can be added later
+                pass
+
+            # Commit the transaction
+            db.commit()
+            db.refresh(agent)
+
+            app_logger.info(f"Created agent {agent_id} with calendar integration")
+
+            return {
+                "success": True,
+                "agent": {
+                    "id": agent.id,
+                    "name": agent.name,
+                    "calendar_id": agent.calendar_id,
+                    "business_hours": agent.business_hours,
+                    "default_slot_duration": agent.default_slot_duration,
+                    "max_daily_appointments": agent.max_daily_appointments,
+                    "buffer_time": agent.buffer_time,
+                    "has_calendar": agent.calendar_id is not None
+                }
+            }
+
+        except Exception as e:
+            db.rollback()
+            app_logger.error(f"Failed to create agent with calendar: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def setup_agent_calendar(db: Session, agent_id: str) -> Dict[str, Any]:
+        """Setup calendar for an existing agent that doesn't have one"""
+        try:
+            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+            if not agent:
+                return {"success": False, "error": "Agent not found"}
+
+            if agent.calendar_id:
+                return {"success": False, "error": "Agent already has a calendar"}
+
+            # Create Google Calendar for the agent
+            calendar_service = CalendarService()
+            calendar_id = calendar_service.create_agent_calendar(agent_id, agent.name)
+
+            # Update agent with calendar ID
+            agent.calendar_id = calendar_id
+
+            # Add calendar tools if not already present
+            current_tools = agent.tools or []
+            calendar_tools = ["create_calendar_event", "cancel_calendar_event", "search_calendar_events",
+                            "update_calendar_event", "list_calendar_events"]
+
+            for tool in calendar_tools:
+                if tool not in current_tools:
+                    current_tools.append(tool)
+
+            agent.tools = current_tools
+            agent.updated_at = datetime.utcnow()
+
+            db.commit()
+
+            app_logger.info(f"Setup calendar {calendar_id} for existing agent {agent_id}")
+
+            return {
+                "success": True,
+                "calendar_id": calendar_id,
+                "message": "Calendar setup successfully"
+            }
+
+        except Exception as e:
+            db.rollback()
+            app_logger.error(f"Failed to setup calendar for agent {agent_id}: {str(e)}")
+            return {"success": False, "error": str(e)}
