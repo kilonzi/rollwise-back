@@ -8,12 +8,12 @@ Supports PDF, TXT, CSV files and plain text input with intelligent content analy
 import os
 import re
 import uuid
-from typing import Dict, Any, List, Optional
-
-import chromadb
+from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 
-from app.models import Collection, Agent
+from app.models import Collection
+from app.utils.chroma_utils import get_chroma_client
+from app.utils.logging_config import app_logger as logger
 
 
 class CollectionService:
@@ -663,14 +663,14 @@ class CollectionService:
             try:
                 self.chroma_client.delete_collection(name=collection.chroma_collection_name)
             except Exception as e:
-                print(f"Warning: Could not delete ChromaDB collection: {e}")
+                logger.warning("Could not delete ChromaDB collection: %s", e)
 
             # Delete files
             if collection.file_path and os.path.exists(collection.file_path):
                 try:
                     os.remove(collection.file_path)
                 except Exception as e:
-                    print(f"Warning: Could not delete file: {e}")
+                    logger.warning("Could not delete file: %s", e)
 
             # Mark as inactive in database
             collection.active = False
@@ -680,7 +680,7 @@ class CollectionService:
 
         except Exception as e:
             self.db_session.rollback()
-            print(f"Error deleting collection: {e}")
+            logger.exception("Error deleting collection: %s", e)
             return False
 
     def get_formatted_collection_details(self, agent_id: str) -> str:
@@ -742,5 +742,5 @@ class CollectionService:
             return "\n".join(prompt_parts)
 
         except Exception as e:
-            print(f"Error formatting collection details: {e}")
+            logger.exception("Error formatting collection details: %s", e)
             return ""

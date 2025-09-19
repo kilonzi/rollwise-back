@@ -12,6 +12,7 @@ from sqlalchemy import desc, and_
 
 from app.models import Conversation, Agent
 from app.services.conversation_service import ConversationService
+from app.utils.logging_config import app_logger as logger
 
 
 class CustomerContextService:
@@ -84,7 +85,7 @@ class CustomerContextService:
             return context
 
         except Exception as e:
-            print(f"❌ Error getting customer context: {str(e)}")
+            logger.exception("Error getting customer context: %s", str(e))
             return self._empty_context(f"Error: {str(e)}")
 
     async def _build_customer_context(
@@ -300,8 +301,8 @@ class CustomerContextService:
         try:
             # Implementation would store preferences in a customer profile table
             # For now, we'll log them for future implementation
-            print(f"📝 Customer preferences update for {phone_number}: {preferences}")
+            logger.info("Customer preferences update for %s: %s", phone_number, preferences)
             return True
         except Exception as e:
-            print(f"❌ Error updating customer preferences: {str(e)}")
+            logger.exception("Error updating customer preferences: %s", str(e))
             return False

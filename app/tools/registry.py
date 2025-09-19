@@ -9,6 +9,7 @@ from app.tools.calendar_tools import (
     update_calendar_event_function,
     list_calendar_events_function
 )
+from app.utils.logging_config import app_logger as logger
 
 
 class ToolRegistry:
@@ -102,7 +103,7 @@ class ToolRegistry:
             db.add(tool_call)
             db.commit()
         except Exception as e:
-            print(f"Failed to log action: {e}")
+            logger.exception("Failed to log action: %s", e)
         finally:
             if db:
                 db.close()

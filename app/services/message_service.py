@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models import Message
+from app.utils.logging_config import app_logger as logger
 
 
 class MessageService:
@@ -44,7 +45,7 @@ class MessageService:
         self.db.commit()
         self.db.refresh(message)
 
-        print(f"💬 Added message #{message.sequence_number}: {role} -> {content[:100]}...")
+        logger.info("Added message #%s: %s -> %s...", message.sequence_number, role, content[:100])
         return message
 
     def get_conversation_messages(self, conversation_id: str) -> List[Message]:
@@ -73,7 +74,7 @@ class MessageService:
         if message:
             message.audio_file_path = audio_file_path
             self.db.commit()
-            print(f"🎵 Updated message {message_id} with audio: {audio_file_path}")
+            logger.info("Updated message %s with audio: %s", message_id, audio_file_path)
         return message
 
     def get_messages_for_summary(self, conversation_id: str) -> List[dict]:

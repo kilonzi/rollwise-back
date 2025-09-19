@@ -3,6 +3,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 
 from app.models import Conversation, Message, Agent, Tenant
+from app.utils.logging_config import app_logger as logger
 
 
 class ConversationService:
@@ -104,14 +105,14 @@ class ConversationService:
                 conversation.summary = summary
                 conversation.updated_at = datetime.now()
                 self.db.commit()
-                print(f"📝 Updated conversation {conversation_id} with summary")
+                logger.info("Updated conversation %s with summary", conversation_id)
                 return True
             else:
-                print(f"⚠️ Conversation {conversation_id} not found for summary update")
+                logger.warning("Conversation %s not found for summary update", conversation_id)
                 return False
 
         except Exception as e:
-            print(f"❌ Error updating conversation summary: {str(e)}")
+            logger.exception("Error updating conversation summary: %s", str(e))
             self.db.rollback()
             return False
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Agent, Collection
 from app.services.customer_context_service import CustomerContextService
+from app.utils.logging_config import app_logger as logger
 
 
 class AgentContextService:
@@ -104,7 +105,7 @@ class AgentContextService:
             }
 
         except Exception as e:
-            print(f"⚠️ Error building agent context: {str(e)}")
+            logger.exception("Error building agent context: %s", str(e))
             return {
                 "full_context": "NEW CUSTOMER: No previous interaction history",
                 "sections": ["Error retrieving context"],
@@ -119,7 +120,7 @@ class AgentContextService:
             customer_service = CustomerContextService(self.db_session)
             return await customer_service.get_customer_context(caller_phone, agent_id)
         except Exception as e:
-            print(f"⚠️ Error getting customer context: {str(e)}")
+            logger.exception("Error getting customer context: %s", str(e))
             return {"has_history": False, "context_summary": "NEW CUSTOMER: No previous interaction history"}
 
     async def _get_collections_context(self, agent: Agent) -> Dict[str, Any]:
@@ -173,7 +174,7 @@ class AgentContextService:
             }
 
         except Exception as e:
-            print(f"⚠️ Error getting collections context: {str(e)}")
+            logger.exception("Error getting collections context: %s", str(e))
             return {
                 "collections": [],
                 "context_summary": "",
@@ -248,7 +249,7 @@ class AgentContextService:
             }
 
         except Exception as e:
-            print(f"⚠️ Error getting tools context: {str(e)}")
+            logger.exception("Error getting tools context: %s", str(e))
             return {
                 "available_tools": [],
                 "context_summary": "",
@@ -321,7 +322,7 @@ class AgentContextService:
             }
 
         except Exception as e:
-            print(f"⚠️ Error getting business context: {str(e)}")
+            logger.exception("Error getting business context: %s", str(e))
             return {
                 "context_summary": "",
                 "error": str(e)
@@ -360,7 +361,7 @@ class AgentContextService:
             }
 
         except Exception as e:
-            print(f"⚠️ Error getting status context: {str(e)}")
+            logger.exception("Error getting status context: %s", str(e))
             return {
                 "context_summary": f"STATUS: Voice {agent.voice_model or 'default'} | Active: {agent.active}",
                 "error": str(e)
@@ -423,7 +424,7 @@ class AgentContextService:
                 notes = collection.notes or ""
 
                 # Build the collection line
-                collection_line = f"{i}. {collection.display_name} — Purpose: {description}."
+                collection_line = f"{i}. {collection.display_name} ��� Purpose: {description}."
 
                 if notes:
                     collection_line += f" Key rules: {notes}."
@@ -449,5 +450,5 @@ class AgentContextService:
 
 
         except Exception as e:
-            print(f"⚠️ Error getting collection details: {str(e)}")
+            logger.exception("Error getting collection details: %s", str(e))
             return f"Error retrieving collection information: {str(e)}"

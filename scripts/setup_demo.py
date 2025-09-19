@@ -15,7 +15,8 @@ import os
 # Add the parent directory to the path so we can import from app
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models import get_db_session, create_tables, Tenant, User, Agent
+from app.models import get_db_session, create_tables, Tenant, User, Agent, UserTenant
+from app.utils.logging_config import app_logger as logger
 
 
 def create_demo_tenant():
@@ -32,7 +33,7 @@ def create_demo_tenant():
         db.add(tenant)
         db.commit()
         db.refresh(tenant)
-        print(f"✅ Created tenant: {tenant.name} (ID: {tenant.id})")
+        logger.info("Created tenant: %s (ID: %s)", tenant.name, tenant.id)
         return tenant
     finally:
         db.close()
@@ -42,17 +43,28 @@ def create_demo_user(tenant_id: str):
     """Create a demo user for the tenant"""
     db = get_db_session()
     try:
+        # In a real app, you'd hash a password. For this demo, we'll use a placeholder.
+        # Note: The User model itself doesn't have a tenant_id. The link is via UserTenant.
         user = User(
-            tenant_id=tenant_id,
             name="Bella Rodriguez",
             email="bella@bellasbeauty.com",
+            password_hash="a_placeholder_password_hash",  # Add required password_hash
             phone_number="+1-555-OWNER",
-            role="admin",
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-        print(f"✅ Created user: {user.name} (ID: {user.id})")
+
+        # Now, create the link in the UserTenant table
+        user_tenant = UserTenant(
+            user_id=user.id,
+            tenant_id=tenant_id,
+            role="admin"
+        )
+        db.add(user_tenant)
+        db.commit()
+
+        logger.info("Created user: %s (ID: %s) and linked to tenant %s", user.name, user.id, tenant_id)
         return user
     finally:
         db.close()
@@ -92,8 +104,8 @@ Always be friendly, knowledgeable, and represent Bella's Beauty Salon with excel
         db.add(agent)
         db.commit()
         db.refresh(agent)
-        print(f"✅ Created agent: {agent.name} (ID: {agent.id})")
-        print(f"📞 Agent phone number: {agent.phone_number}")
+        logger.info("Created agent: %s (ID: %s)", agent.name, agent.id)
+        logger.info("Agent phone number: %s", agent.phone_number)
         return agent
     finally:
         db.close()
@@ -113,17 +125,28 @@ def create_second_demo_tenant():
         db.add(tenant)
         db.commit()
         db.refresh(tenant)
-        print(f"✅ Created second tenant: {tenant.name} (ID: {tenant.id})")
+        logger.info("Created second tenant: %s (ID: %s)", tenant.name, tenant.id)
 
         # Create user for second tenant
         user = User(
-            tenant_id=tenant.id,
             name="Mike Johnson",
             email="mike@mikesauto.com",
+            password_hash="a_placeholder_password_hash", # Add required password_hash
             phone_number="+1-555-MIKE",
-            role="admin",
         )
         db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        # Link user to the new tenant
+        user_tenant = UserTenant(
+            user_id=user.id,
+            tenant_id=tenant.id,
+            role="admin"
+        )
+        db.add(user_tenant)
+        db.commit()
+
 
         # Create agent for second tenant
         agent = Agent(
@@ -156,8 +179,8 @@ Always be helpful, knowledgeable about automotive services, and professional."""
         db.commit()
         db.refresh(agent)
 
-        print(f"✅ Created second agent: {agent.name} (ID: {agent.id})")
-        print(f"📞 Second agent phone number: {agent.phone_number}")
+        logger.info("Created second agent: %s (ID: %s)", agent.name, agent.id)
+        logger.info("Second agent phone number: %s", agent.phone_number)
         return tenant, user, agent
     finally:
         db.close()
@@ -165,50 +188,44 @@ Always be helpful, knowledgeable about automotive services, and professional."""
 
 def main():
     """Main setup function"""
-    print("🚀 Setting up RollWise Multi-Tenant Demo Data")
-    print("=" * 50)
+    logger.info("Setting up RollWise Multi-Tenant Demo Data")
+    logger.info("%s", "=" * 50)
 
     # Ensure database tables exist
     create_tables()
-    print("✅ Database tables verified")
+    logger.info("Database tables verified")
 
     # Create first demo tenant and agent
-    print("\n📋 Creating Demo Tenant #1:")
+    logger.info("Creating Demo Tenant #1:")
     tenant1 = create_demo_tenant()
     create_demo_user(tenant1.id)
     agent1 = create_demo_agent(tenant1.id)
 
     # Create second demo tenant and agent
-    print("\n📋 Creating Demo Tenant #2:")
+    logger.info("Creating Demo Tenant #2:")
     tenant2, user2, agent2 = create_second_demo_tenant()
 
-    print("\n" + "=" * 50)
-    print("🎉 Demo setup complete!")
-    print("\n📊 Summary:")
-    print("   • Tenants created: 2")
-    print("   • Users created: 2")
-    print("   • Agents created: 2")
+    logger.info("%s", "=" * 50)
+    logger.info("Demo setup complete!")
+    logger.info("Summary:")
+    logger.info("   • Tenants created: 2")
+    logger.info("   • Users created: 2")
+    logger.info("   • Agents created: 2")
 
-    print("\n🔧 Next Steps:")
-    print("1. Update your Twilio webhook URLs:")
-    print(
-        f"   - Agent 1 ({agent1.name}): https://your-domain.com/agent/{agent1.id}/voice"
-    )
-    print(
-        f"   - Agent 2 ({agent2.name}): https://your-domain.com/agent/{agent2.id}/voice"
-    )
-    print("")
-    print("2. Test the agents:")
-    print(f"   - Call {agent1.phone_number} for {tenant1.name}")
-    print(f"   - Call {agent2.phone_number} for {tenant2.name}")
-    print("")
-    print("3. View admin API at: http://localhost:8090/admin/")
-    print("4. View API docs at: http://localhost:8090/docs")
+    logger.info("Next Steps:")
+    logger.info("1. Update your Twilio webhook URLs:")
+    logger.info("   - Agent 1 (%s): https://your-domain.com/agent/%s/voice", agent1.name, agent1.id)
+    logger.info("   - Agent 2 (%s): https://your-domain.com/agent/%s/voice", agent2.name, agent2.id)
+    logger.info("2. Test the agents:")
+    logger.info("   - Call %s for %s", agent1.phone_number, tenant1.name)
+    logger.info("   - Call %s for %s", agent2.phone_number, tenant2.name)
+    logger.info("3. View admin API at: http://localhost:8090/admin/")
+    logger.info("4. View API docs at: http://localhost:8090/docs")
 
-    print("\n⚠️  Remember to:")
-    print("   - Replace phone numbers with your actual Twilio numbers")
-    print("   - Set your BASE_URL in .env to your actual domain/ngrok URL")
-    print("   - Configure your Deepgram API key")
+    logger.warning("Remember to:")
+    logger.warning("   - Replace phone numbers with your actual Twilio numbers")
+    logger.warning("   - Set your BASE_URL in .env to your actual domain/ngrok URL")
+    logger.warning("   - Configure your Deepgram API key")
 
 
 if __name__ == "__main__":
