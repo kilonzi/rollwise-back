@@ -5,7 +5,6 @@ import os
 
 from app.models import get_db, Conversation, Message, UserTenant, Agent
 from app.services.conversation_service import ConversationService
-from app.services.message_service import MessageService
 from app.services.audio_service import AudioService
 from app.api.schemas.conversation_schemas import ConversationResponse, MessageResponse
 from app.api.dependencies import get_current_user
@@ -114,8 +113,8 @@ async def get_conversation_messages(
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
 
-    msg_service = MessageService(db)
-    messages = msg_service.get_conversation_messages(conversation_id)
+    conv_service = ConversationService(db)
+    messages = conv_service.get_conversation_messages(conversation_id)
     return messages
 
 
@@ -149,8 +148,8 @@ async def get_message_audio(
         audio_path = AudioService.get_audio_file_path(str(conversation.id), str(message.id))
         if os.path.exists(audio_path):
             # Persist the path for future calls
-            msg_service = MessageService(db)
-            msg_service.update_message_audio(str(message.id), audio_path)
+            conv_service = ConversationService(db)
+            conv_service.update_message_audio(str(message.id), audio_path)
         else:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found for this message")
 
