@@ -15,9 +15,33 @@ class AgentService:
     """Service for managing AI agents and their configurations"""
 
     @staticmethod
-    def build_agent_config(agent: Agent) -> Dict[str, Any]:
-        """Build Deepgram agent configuration from database agent record"""
-        return AgentConfigBuilder.build_agent_config(agent)
+    def build_agent_config(agent: Agent, customer_context: str = "", dataset_details: str = "", collection_details: str = "") -> Dict[str, Any]:
+        """Build Deepgram agent configuration from database agent record with comprehensive context"""
+        try:
+            # Use the AgentConfigBuilder to build the configuration with comprehensive context
+            return AgentConfigBuilder.build_agent_config(
+                agent,
+                customer_context=customer_context,
+                collection_details=collection_details
+            )
+        except Exception as e:
+            app_logger.error(f"Failed to build agent config for agent {agent.id}: {str(e)}")
+            # Return a minimal fallback configuration to prevent call drops
+            return {
+                "agent": {
+                    "speak": {
+                        "provider": {
+                            "model": agent.voice_model or "aura-2-thalia-en"
+                        }
+                    },
+                    "language": agent.language or "en",
+                    "think": {
+                        "prompt": agent.system_prompt or "You are a helpful AI assistant.",
+                        "functions": []
+                    },
+                    "greeting": agent.greeting or "Hello! How can I help you today?"
+                }
+            }
 
     @staticmethod
     def get_agent_by_phone(db: Session, phone_number: str) -> type[Agent] | None:
@@ -47,14 +71,14 @@ class AgentService:
     def assign_phone_number(db: Session, agent_id: str, phone_number: str) -> Dict[str, Any]:
         """Assign a phone number to an agent"""
         try:
-            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
             if not agent:
                 return {"success": False, "error": "Agent not found"}
 
             # Check if phone number is already in use
             existing_agent = db.query(Agent).filter(
                 Agent.phone_number == phone_number,
-                Agent.active == True,
+                Agent.active,
                 Agent.id != agent_id
             ).first()
             if existing_agent:
@@ -79,7 +103,7 @@ class AgentService:
         """Get agents that don't have phone numbers assigned"""
         query = db.query(Agent).filter(
             Agent.phone_number.is_(None),
-            Agent.active == True
+            Agent.active
         )
 
         if tenant_id:
@@ -97,7 +121,7 @@ class AgentService:
                                  language: str = "en",
                                  business_hours: Optional[Dict[str, Any]] = None,
                                  default_slot_duration: int = 30,
-                                 max_daily_appointments: int = 8,
+                                 max_slot_appointments: int = 1,
                                  buffer_time: int = 15) -> Dict[str, Any]:
         """Create a new agent with integrated calendar"""
         try:
@@ -123,7 +147,7 @@ class AgentService:
                 language=language,
                 business_hours=business_hours,
                 default_slot_duration=default_slot_duration,
-                max_daily_appointments=max_daily_appointments,
+                max_slot_appointments=max_slot_appointments,
                 buffer_time=buffer_time,
                 tools=["create_calendar_event", "cancel_calendar_event", "search_calendar_events",
                        "update_calendar_event", "list_calendar_events"]  # Include calendar tools
@@ -158,7 +182,7 @@ class AgentService:
                     "calendar_id": agent.calendar_id,
                     "business_hours": agent.business_hours,
                     "default_slot_duration": agent.default_slot_duration,
-                    "max_daily_appointments": agent.max_daily_appointments,
+                    "max_slot_appointments": agent.max_slot_appointments,
                     "buffer_time": agent.buffer_time,
                     "has_calendar": agent.calendar_id is not None
                 }
@@ -173,7 +197,7 @@ class AgentService:
     def setup_agent_calendar(db: Session, agent_id: str) -> Dict[str, Any]:
         """Setup calendar for an existing agent that doesn't have one"""
         try:
-            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+            agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
             if not agent:
                 return {"success": False, "error": "Agent not found"}
 

@@ -6,16 +6,19 @@ from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import os
+import uuid
 
-from app.models import get_db, User, Tenant, Agent, UserTenant, Conversation, Message, BusinessDataset
+from app.models import get_db, User, Tenant, Agent, UserTenant, Conversation, Message
 from app.services.user_service import UserService
 from app.services.agent_service import AgentService
 from app.services.agent_chat_service import AgentChatService
 from app.services.conversation_service import ConversationService
 from app.services.message_service import MessageService
 from app.services.audio_service import AudioService
-from app.services.business_dataset_service import BusinessDatasetService
+from app.services.board_service import BoardService
+from app.services.collection_service import CollectionService
 from app.utils.date_utils import normalize_date_range
+from app.utils.logging_config import app_logger
 
 router = APIRouter()
 security = HTTPBearer()
@@ -57,6 +60,8 @@ class AgentUpdateRequest(BaseModel):
     greeting: Optional[str] = None
     system_prompt: Optional[str] = None
     voice_model: Optional[str] = None
+    eleven_labs_voice_id: Optional[str] = None
+    voice_provider: Optional[str] = None
     language: Optional[str] = None
     tools: Optional[List[str]] = None
 
@@ -64,7 +69,7 @@ class AgentUpdateRequest(BaseModel):
     calendar_id: Optional[str] = None  # Google Calendar ID
     business_hours: Optional[Dict[str, Any]] = None  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
     default_slot_duration: Optional[int] = None
-    max_daily_appointments: Optional[int] = None
+    max_slot_appointments: Optional[int] = None  # max appointments per time slot
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None  # ["2024-12-25", "2024-01-01"]
     invitees: Optional[List[Dict[str, Any]]] = None  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}]
@@ -87,6 +92,8 @@ class AgentCreateRequest(BaseModel):
     greeting: str
     system_prompt: str
     voice_model: str = "aura-2-thalia-en"
+    eleven_labs_voice_id: Optional[str] = None
+    voice_provider: str = "eleven_labs"  # "eleven_labs" or "deepgram"
     conversation_starters: Optional[List[str]] = []
     max_duration: Optional[int] = 300
 
@@ -139,6 +146,8 @@ class AgentResponse(BaseModel):
     greeting: str
     system_prompt: str
     voice_model: str
+    eleven_labs_voice_id: Optional[str] = None
+    voice_provider: str = "eleven_labs"
     language: str
     tools: Optional[List[str]] = None
 
@@ -146,7 +155,7 @@ class AgentResponse(BaseModel):
     calendar_id: Optional[str] = None
     business_hours: Optional[Dict[str, Any]] = None
     default_slot_duration: Optional[int] = None
-    max_daily_appointments: Optional[int] = None
+    max_slot_appointments: Optional[int] = None
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None
     invitees: Optional[List[Dict[str, Any]]] = None
@@ -361,7 +370,7 @@ async def get_tenant_users(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     
     if not user_tenant and current_user["global_role"] != "platform_admin":
@@ -392,7 +401,7 @@ async def get_tenant_agents(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     print(user_tenant)
     if not user_tenant and current_user["global_role"] != "platform_admin":
@@ -403,7 +412,7 @@ async def get_tenant_agents(
     
     agents = db.query(Agent).filter(
         Agent.tenant_id == tenant_id,
-        Agent.active == True
+        Agent.active
     ).all()
     
     return agents
@@ -421,7 +430,7 @@ async def create_tenant_agent(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
 
     if not user_tenant:
@@ -439,7 +448,7 @@ async def create_tenant_agent(
     # Check if tenant exists
     tenant = db.query(Tenant).filter(
         Tenant.id == tenant_id,
-        Tenant.active == True
+        Tenant.active
     ).first()
     if not tenant:
         raise HTTPException(
@@ -447,19 +456,65 @@ async def create_tenant_agent(
             detail="Tenant not found"
         )
 
-    # Create agent
+    # Create agent with calendar defaults
     try:
+        # Get current user details for default invitee
+        user_email = current_user.get("email", "")
+        user_name = current_user.get("name", "User")
+
+        # Default business hours (Monday to Friday, 8 AM to 5 PM)
+        default_business_hours = {
+            "start": "08:00",
+            "end": "17:00",
+            "timezone": "UTC",
+            "days": [1, 2, 3, 4, 5]  # Monday to Friday
+        }
+
+        # Default invitees (creator of the agent)
+        default_invitees = [
+            {
+                "name": user_name,
+                "email": user_email,
+                "availability": "always"
+            }
+        ] if user_email else []
+
         agent = Agent(
             tenant_id=tenant_id,
             name=agent_data.name,
             greeting=agent_data.greeting,
             voice_model=agent_data.voice_model,
+            eleven_labs_voice_id=agent_data.eleven_labs_voice_id,
+            voice_provider=agent_data.voice_provider,
             system_prompt=agent_data.system_prompt,
             language=agent_data.language,
-            tools=[]  # Default empty tools list
+            tools=[],  # Default empty tools list
+            # Calendar defaults
+            business_hours=default_business_hours,
+            default_slot_duration=30,
+            max_slot_appointments=1,  # No overbooking
+            buffer_time=10,
+            invitees=default_invitees,
+            booking_enabled=True
         )
 
         db.add(agent)
+        db.flush()  # Get the agent ID before calendar creation
+
+        # Create Google Calendar for this agent
+        try:
+            from app.services.calendar_service import CalendarService
+            calendar_service = CalendarService()
+
+            # Create calendar with agent ID and name
+            calendar_id = calendar_service.create_agent_calendar(agent.id, agent.name)
+            agent.calendar_id = calendar_id
+            app_logger.info(f"Created calendar {calendar_id} for agent {agent.id}")
+
+        except Exception as e:
+            app_logger.error(f"Error creating calendar for agent {agent.id}: {str(e)}")
+            # Continue without calendar - can be set up later
+
         db.commit()
         db.refresh(agent)
 
@@ -471,6 +526,8 @@ async def create_tenant_agent(
                 "name": agent.name,
                 "phone_number": agent.phone_number,
                 "voice_model": agent.voice_model,
+                "eleven_labs_voice_id": agent.eleven_labs_voice_id,
+                "voice_provider": agent.voice_provider,
                 "language": agent.language,
                 "greeting": agent.greeting,
                 "system_prompt": agent.system_prompt,
@@ -499,7 +556,7 @@ async def update_tenant_agent(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     
     if not user_tenant:
@@ -518,7 +575,7 @@ async def update_tenant_agent(
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
         Agent.tenant_id == tenant_id,
-        Agent.active == True
+        Agent.active
     ).first()
     if not agent:
         raise HTTPException(
@@ -559,7 +616,7 @@ async def delete_tenant_agent(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     
     if not user_tenant:
@@ -617,7 +674,7 @@ async def assign_agent_phone_number(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
 
     if not user_tenant:
@@ -636,7 +693,7 @@ async def assign_agent_phone_number(
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
         Agent.tenant_id == tenant_id,
-        Agent.active == True
+        Agent.active
     ).first()
     if not agent:
         raise HTTPException(
@@ -671,7 +728,7 @@ async def get_agents_without_phone_numbers(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
 
     if not user_tenant and current_user["global_role"] != "platform_admin":
@@ -689,6 +746,8 @@ async def get_agents_without_phone_numbers(
                 "name": agent.name,
                 "language": agent.language,
                 "voice_model": agent.voice_model,
+                "eleven_labs_voice_id": agent.eleven_labs_voice_id,
+                "voice_provider": agent.voice_provider,
                 "created_at": agent.created_at.isoformat()
             }
             for agent in agents
@@ -709,7 +768,7 @@ async def chat_with_agent_knowledge(
     # Get agent and verify access
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
-        Agent.active == True
+        Agent.active
     ).first()
 
     if not agent:
@@ -722,7 +781,7 @@ async def chat_with_agent_knowledge(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
 
     if not user_tenant and current_user["global_role"] != "platform_admin":
@@ -734,7 +793,7 @@ async def chat_with_agent_knowledge(
     # Initialize chat service and process query
     chat_service = AgentChatService(db)
 
-    result = chat_service.query_agent_knowledge(
+    result = await chat_service.query_agent_knowledge(
         agent_id=agent_id,
         query=chat_query.query,
         date_from=chat_query.date_from,
@@ -806,7 +865,7 @@ async def get_tenant_conversations(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
@@ -825,7 +884,7 @@ async def get_agent_conversations(
     db: Session = Depends(get_db)
 ):
     """List conversations for a specific agent, ensuring user has access to the agent's tenant."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
@@ -833,7 +892,7 @@ async def get_agent_conversations(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
@@ -851,14 +910,14 @@ async def get_conversation_messages(
 ):
     """Get messages for a conversation, including audio_file_path when available."""
     # Fetch conversation and check access
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.active == True).first()
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.active).first()
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == conversation.tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
@@ -876,11 +935,11 @@ async def get_message_audio(
 ):
     """Fetch and stream the audio file for a specific message. Ensures predictable path using message_id."""
     # Load message and parent conversation
-    message = db.query(Message).filter(Message.id == message_id, Message.active == True).first()
+    message = db.query(Message).filter(Message.id == message_id, Message.active).first()
     if not message:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
 
-    conversation = db.query(Conversation).filter(Conversation.id == message.conversation_id, Conversation.active == True).first()
+    conversation = db.query(Conversation).filter(Conversation.id == message.conversation_id, Conversation.active).first()
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
@@ -888,7 +947,7 @@ async def get_message_audio(
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == conversation.tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
@@ -912,256 +971,6 @@ async def get_message_audio(
     return FileResponse(path=audio_path, media_type="audio/wav", filename=filename)
 
 
-@router.get("/conversations/{conversation_id}/messages/{message_id}/audio")
-async def get_conversation_message_audio(
-    conversation_id: str,
-    message_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Alias endpoint to fetch audio for a message under a conversation path."""
-    # Validate that the message belongs to the conversation
-    message = db.query(Message).filter(
-        Message.id == message_id,
-        Message.conversation_id == conversation_id,
-        Message.active == True
-    ).first()
-    if not message:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found in conversation")
-    audio_path = AudioService.get_audio_file_path(conversation_id, message_id)
-    if not audio_path:
-        audio_path = AudioService.get_audio_file_path(conversation_id, message_id)
-        if os.path.exists(audio_path):
-            msg_service = MessageService(db)
-            msg_service.update_message_audio(message.id, audio_path)
-        else:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found for this message")
-
-    if not os.path.exists(audio_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio file not found")
-
-    filename = os.path.basename(audio_path)
-    return FileResponse(path=audio_path, media_type="audio/wav", filename=filename)
-
-
-# -------- Datasets CRUD under Agents --------
-
-def _serialize_dataset(ds: BusinessDataset) -> dict:
-    return {
-        "id": ds.id,
-        "tenant_id": ds.tenant_id,
-        "agent_id": ds.agent_id,
-        "label": ds.label,
-        "file_name": ds.file_name,
-        "file_path": ds.file_path,
-        "file_type": ds.file_type,
-        "columns": ds.columns or [],
-        "record_count": ds.record_count,
-        "uploaded_at": ds.uploaded_at.isoformat() if ds.uploaded_at else None,
-        "processed_at": ds.processed_at.isoformat() if ds.processed_at else None,
-        "active": ds.active,
-        "extra_info": ds.extra_info or {},
-        "created_at": ds.created_at.isoformat() if ds.created_at else None,
-        "updated_at": ds.updated_at.isoformat() if ds.updated_at else None,
-    }
-
-
-@router.get("/agents/{agent_id}/datasets")
-async def list_agent_datasets(
-    agent_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """List all datasets for an agent (requires access to agent's tenant)."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    # Access check
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    service = BusinessDatasetService(db)
-    datasets = service.list_datasets(tenant_id=agent.tenant_id, agent_id=agent_id)
-    return [_serialize_dataset(d) for d in datasets]
-
-
-@router.post("/agents/{agent_id}/datasets")
-async def create_agent_dataset(
-    agent_id: str,
-    label: str = Form(...),
-    columns: Optional[str] = Form(None, description="Comma-separated list of important columns"),
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Create and ingest a dataset for an agent. Accepts file upload and optional columns list."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    # Access check
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    # Save uploaded file to predictable path
-    try:
-        base_dir = os.path.join("store", "datasets", agent_id)
-        os.makedirs(base_dir, exist_ok=True)
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        safe_name = os.path.basename(file.filename or "uploaded")
-        filename = f"{label}_{timestamp}_{safe_name}"
-        file_path = os.path.join(base_dir, filename)
-        contents = await file.read()
-        with open(file_path, "wb") as out:
-            out.write(contents)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to save file: {e}")
-
-    # Determine file type from extension
-    ext = os.path.splitext(file.filename or "")[1].lower().strip(".") or "csv"
-
-    # Parse columns
-    columns_list: List[str] = []
-    if columns:
-        columns_list = [c.strip() for c in columns.split(",") if c.strip()]
-
-    try:
-        service = BusinessDatasetService(db)
-        dataset = service.upload_dataset(
-            tenant_id=agent.tenant_id,
-            agent_id=agent_id,
-            label=label,
-            file_path=file_path,
-            file_name=filename,
-            file_type=ext,
-            extra_info={"uploaded_by": current_user["id"]},
-            columns=columns_list
-        )
-        return {
-            "message": "Dataset uploaded successfully",
-            "dataset": _serialize_dataset(dataset)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-@router.get("/agents/{agent_id}/datasets/{dataset_id}")
-async def get_agent_dataset(
-    agent_id: str,
-    dataset_id: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get a single dataset for an agent."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    # Access check
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    service = BusinessDatasetService(db)
-    dataset = service.get_dataset(dataset_id)
-    if not dataset or dataset.agent_id != agent_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-    return _serialize_dataset(dataset)
-
-
-@router.put("/agents/{agent_id}/datasets/{dataset_id}")
-async def update_agent_dataset(
-    agent_id: str,
-    dataset_id: int,
-    columns: Optional[List[str]] = None,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Update a dataset's columns list (critical columns)."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    # Access check
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    dataset = db.query(BusinessDataset).filter(
-        BusinessDataset.id == dataset_id,
-        BusinessDataset.agent_id == agent_id,
-        BusinessDataset.active == True
-    ).first()
-    if not dataset:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-
-    try:
-        if columns is not None:
-            dataset.columns = columns
-            extra = dataset.extra_info or {}
-            extra["columns"] = columns
-            dataset.extra_info = extra
-            dataset.updated_at = datetime.utcnow()
-            db.commit()
-        return {"message": "Dataset updated", "dataset": _serialize_dataset(dataset)}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-@router.delete("/agents/{agent_id}/datasets/{dataset_id}")
-async def delete_agent_dataset(
-    agent_id: str,
-    dataset_id: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Delete a dataset (soft delete and Chroma cleanup)."""
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    # Access check
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    service = BusinessDatasetService(db)
-    # Ensure dataset belongs to agent before deletion
-    dataset = service.get_dataset(dataset_id)
-    if not dataset or dataset.agent_id != agent_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
-
-    success = service.delete_dataset(dataset_id)
-    if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to delete dataset")
-
-    return {"message": "Dataset deleted", "dataset_id": dataset_id}
-
-
 @router.get("/agents/{agent_id}/statistics")
 async def get_agent_statistics(
     agent_id: str,
@@ -1177,14 +986,14 @@ async def get_agent_statistics(
       and caller analytics (repeat callers, top callers).
     """
     # Validate agent and access
-    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     user_tenant = db.query(UserTenant).filter(
         UserTenant.user_id == current_user["id"],
         UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active == True
+        UserTenant.active
     ).first()
     if not user_tenant and current_user["global_role"].lower() != "platform_admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
@@ -1202,7 +1011,7 @@ async def get_agent_statistics(
     # Query conversations within range
     q = db.query(Conversation).filter(
         Conversation.agent_id == agent_id,
-        Conversation.active == True,
+        Conversation.active,
         Conversation.started_at >= date_from,
         Conversation.started_at <= date_to,
     )
@@ -1312,3 +1121,599 @@ async def get_agent_statistics(
             "top_callers": top_callers,
         },
     }
+
+
+# Board Management Endpoints
+class BoardItemCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    lane_id: str = "new"
+    labels: Optional[List[str]] = []
+    priority: str = "medium"
+    assignee: Optional[str] = None
+    due_date: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+
+
+class BoardItemUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    labels: Optional[List[str]] = None
+    priority: Optional[str] = None
+    assignee: Optional[str] = None
+    due_date: Optional[str] = None
+    item_metadata: Optional[Dict[str, Any]] = None
+
+
+class BoardItemMove(BaseModel):
+    lane_id: str
+
+
+# Collection Management Models
+class CollectionCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    notes: Optional[str] = ""
+    text_content: Optional[str] = None
+
+
+class CollectionUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CollectionResponse(BaseModel):
+    id: str
+    agent_id: str
+    name: str
+    display_name: str
+    description: Optional[str]
+    notes: Optional[str]
+    file_type: Optional[str]
+    content_type: Optional[str]
+    chunk_count: int
+    status: str
+    error_message: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class BoardSettingsUpdate(BaseModel):
+    name: Optional[str] = None
+    lanes: Optional[List[Dict[str, Any]]] = None
+    labels: Optional[List[Dict[str, Any]]] = None
+
+
+@router.get("/agents/{agent_id}/board")
+async def get_agent_board(
+    agent_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get board data for an agent with optional date filtering"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+        
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get board and items
+        board_data = BoardService.get_board_with_items(db, agent_id, start_date, end_date)
+        
+        return board_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error getting board for agent {agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/agents/{agent_id}/board/items/{item_id}/move")
+async def move_board_item(
+    agent_id: str,
+    item_id: str,
+    move_data: BoardItemMove,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Move a board item to a different lane"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+        
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Move the item
+        result = BoardService.move_item(db, agent_id, item_id, move_data.lane_id)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"Error moving board item {item_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.patch("/agents/{agent_id}/board/items/{item_id}")
+async def update_board_item(
+    agent_id: str,
+    item_id: str,
+    updates: BoardItemUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a board item"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+        
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Update the item
+        update_dict = updates.dict(exclude_unset=True)
+        result = BoardService.update_item(db, agent_id, item_id, update_dict)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"Error updating board item {item_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.put("/agents/{agent_id}/board/settings")
+async def update_board_settings(
+    agent_id: str,
+    settings: BoardSettingsUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update board settings (lanes, labels)"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+        
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Update board settings
+        settings_dict = settings.dict(exclude_unset=True)
+        result = BoardService.update_board_settings(db, agent_id, settings_dict)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"Error updating board settings for agent {agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/agents/{agent_id}/board/items")
+async def create_board_item(
+    agent_id: str,
+    item_data: BoardItemCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new board item"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+        
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Create the item
+        item_dict = item_data.dict()
+        result = BoardService.create_board_item(db, agent_id, item_dict)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"Error creating board item for agent {agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Collections Management Endpoints
+
+@router.post("/agents/{agent_id}/collections", response_model=CollectionResponse)
+async def create_collection(
+    agent_id: str,
+    collection_data: CollectionCreate = None,
+    file: UploadFile = File(None),
+    name: str = Form(None),
+    description: str = Form(""),
+    notes: str = Form(""),
+    text_content: str = Form(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new collection with file upload or text content"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Handle form data vs JSON data
+        if collection_data:
+            collection_name = collection_data.name
+            collection_description = collection_data.description
+            collection_notes = collection_data.notes
+            collection_text_content = collection_data.text_content
+        else:
+            collection_name = name
+            collection_description = description
+            collection_notes = notes
+            collection_text_content = text_content
+
+        if not collection_name:
+            raise HTTPException(status_code=400, detail="Collection name is required")
+
+        # Ensure we have either file or text content
+        file_path = None
+        file_type = "text"
+
+        if file:
+            # Create collections directory if it doesn't exist
+            collections_dir = "store/collections"
+            os.makedirs(collections_dir, exist_ok=True)
+
+            # Determine file type
+            if file.content_type:
+                if "pdf" in file.content_type:
+                    file_type = "pdf"
+                elif "csv" in file.content_type or file.filename.endswith('.csv'):
+                    file_type = "csv"
+                else:
+                    file_type = "txt"
+            elif file.filename:
+                if file.filename.endswith('.pdf'):
+                    file_type = "pdf"
+                elif file.filename.endswith('.csv'):
+                    file_type = "csv"
+                else:
+                    file_type = "txt"
+
+            # Generate file path
+            collection_id = str(uuid.uuid4())
+            file_extension = file_type
+            file_path = os.path.join(collections_dir, f"{collection_id}.{file_extension}")
+
+            # Save uploaded file
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                buffer.write(content)
+
+        elif not collection_text_content:
+            raise HTTPException(
+                status_code=400,
+                detail="Either file upload or text content is required"
+            )
+
+        # Create collection using service
+        collection_service = CollectionService(db)
+        collection = await collection_service.create_collection(
+            agent_id=agent_id,
+            name=collection_name,
+            description=collection_description,
+            notes=collection_notes,
+            file_path=file_path,
+            text_content=collection_text_content,
+            file_type=file_type
+        )
+
+        return CollectionResponse(
+            id=collection.id,
+            agent_id=collection.agent_id,
+            name=collection.name,
+            display_name=collection.display_name,
+            description=collection.description,
+            notes=collection.notes,
+            file_type=collection.file_type,
+            content_type=collection.content_type,
+            chunk_count=collection.chunk_count,
+            status=collection.status,
+            error_message=collection.error_message,
+            created_at=collection.created_at,
+            updated_at=collection.updated_at
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error creating collection for agent {agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/agents/{agent_id}/collections", response_model=List[CollectionResponse])
+async def list_agent_collections(
+    agent_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all collections for an agent"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get collections
+        collection_service = CollectionService(db)
+        collections = collection_service.get_agent_collections(agent_id)
+
+        return [
+            CollectionResponse(
+                id=collection.id,
+                agent_id=collection.agent_id,
+                name=collection.name,
+                display_name=collection.display_name,
+                description=collection.description,
+                notes=collection.notes,
+                file_type=collection.file_type,
+                content_type=collection.content_type,
+                chunk_count=collection.chunk_count,
+                status=collection.status,
+                error_message=collection.error_message,
+                created_at=collection.created_at,
+                updated_at=collection.updated_at
+            )
+            for collection in collections
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error listing collections for agent {agent_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/agents/{agent_id}/collections/{collection_id}", response_model=CollectionResponse)
+async def get_collection(
+    agent_id: str,
+    collection_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific collection"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get collection
+        collection_service = CollectionService(db)
+        collection = collection_service.get_collection(agent_id, collection_id)
+
+        if not collection:
+            raise HTTPException(status_code=404, detail="Collection not found")
+
+        return CollectionResponse(
+            id=collection.id,
+            agent_id=collection.agent_id,
+            name=collection.name,
+            display_name=collection.display_name,
+            description=collection.description,
+            notes=collection.notes,
+            file_type=collection.file_type,
+            content_type=collection.content_type,
+            chunk_count=collection.chunk_count,
+            status=collection.status,
+            error_message=collection.error_message,
+            created_at=collection.created_at,
+            updated_at=collection.updated_at
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error getting collection {collection_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.put("/agents/{agent_id}/collections/{collection_id}", response_model=CollectionResponse)
+async def update_collection(
+    agent_id: str,
+    collection_id: str,
+    collection_data: CollectionUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a collection's metadata"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Get collection
+        collection_service = CollectionService(db)
+        collection = collection_service.get_collection(agent_id, collection_id)
+
+        if not collection:
+            raise HTTPException(status_code=404, detail="Collection not found")
+
+        # Update fields
+        if collection_data.name is not None:
+            new_name = collection_service.slugify_name(collection_data.name)
+            collection.name = new_name
+            collection.display_name = collection_data.name
+
+        if collection_data.description is not None:
+            collection.description = collection_data.description
+
+        if collection_data.notes is not None:
+            collection.notes = collection_data.notes
+
+        collection.updated_at = datetime.utcnow()
+        db.commit()
+
+        return CollectionResponse(
+            id=collection.id,
+            agent_id=collection.agent_id,
+            name=collection.name,
+            display_name=collection.display_name,
+            description=collection.description,
+            notes=collection.notes,
+            file_type=collection.file_type,
+            content_type=collection.content_type,
+            chunk_count=collection.chunk_count,
+            status=collection.status,
+            error_message=collection.error_message,
+            created_at=collection.created_at,
+            updated_at=collection.updated_at
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error updating collection {collection_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/agents/{agent_id}/collections/{collection_id}")
+async def delete_collection(
+    agent_id: str,
+    collection_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a collection"""
+    try:
+        # Verify agent exists and user has access
+        agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if user has access to this agent's tenant
+        user_tenant = db.query(UserTenant).filter(
+            UserTenant.user_id == current_user["id"],
+            UserTenant.tenant_id == agent.tenant_id,
+            UserTenant.active
+        ).first()
+
+        if not user_tenant:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Delete collection
+        collection_service = CollectionService(db)
+        success = collection_service.delete_collection(agent_id, collection_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Collection not found")
+
+        return {"message": "Collection deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"Error deleting collection {collection_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+

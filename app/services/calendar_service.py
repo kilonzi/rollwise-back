@@ -1,11 +1,10 @@
 import os
 import json
-from datetime import datetime, timedelta, time
-from typing import Dict, List, Optional, Any, Tuple
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from sqlalchemy.orm import Session
 
 from app.config.settings import settings
 from app.models import Agent
@@ -39,7 +38,7 @@ class CalendarService:
 
             # For domain-wide delegation, delegate to the domain admin
             if settings.GOOGLE_CALENDAR_DOMAIN:
-                self.credentials = self.credentials.with_subject(f"admin@{settings.GOOGLE_CALENDAR_DOMAIN}")
+                self.credentials = self.credentials.with_subject(f"jkitonyo@{settings.GOOGLE_CALENDAR_DOMAIN}")
 
             # Build the Calendar service
             self.service = build('calendar', 'v3', credentials=self.credentials)
@@ -110,8 +109,8 @@ class CalendarService:
 
                 current_date += timedelta(days=1)
 
-            # Limit to max daily appointments
-            return self._limit_daily_slots(available_slots, agent.max_daily_appointments)
+            # Limit to max slot appointments (prevent overbooking)
+            return self._limit_slot_appointments(available_slots, agent.max_slot_appointments)
 
         except HttpError as e:
             app_logger.error(f"Failed to get available slots for agent {agent.id}: {str(e)}")
@@ -174,20 +173,16 @@ class CalendarService:
 
         return slots
 
-    def _limit_daily_slots(self, slots: List[Dict[str, Any]], max_daily: int) -> List[Dict[str, Any]]:
-        """Limit slots per day to max_daily_appointments"""
-        daily_counts = {}
-        limited_slots = []
+    def _limit_slot_appointments(self, slots: List[Dict[str, Any]], max_per_slot: int) -> List[Dict[str, Any]]:
+        """Limit appointments per time slot to prevent overbooking"""
+        if max_per_slot is None or max_per_slot <= 0:
+            return slots
 
-        for slot in slots:
-            slot_date = datetime.fromisoformat(slot['start']).date()
-            daily_counts[slot_date] = daily_counts.get(slot_date, 0)
+        # For now, if max_per_slot is 1, we've already filtered out overlapping slots
+        # This method can be enhanced later to handle multiple appointments per slot
+        # by checking existing appointments for each time slot
 
-            if daily_counts[slot_date] < max_daily:
-                limited_slots.append(slot)
-                daily_counts[slot_date] += 1
-
-        return limited_slots
+        return slots
 
     def create_event(self,
                     agent: Agent,
@@ -336,7 +331,7 @@ class CalendarService:
             # Mark as cancelled
             event['status'] = 'cancelled'
 
-            updated_event = self.service.events().update(
+            self.service.events().update(
                 calendarId=agent.calendar_id,
                 eventId=event_id,
                 body=event

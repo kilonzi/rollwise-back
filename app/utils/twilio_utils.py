@@ -106,13 +106,15 @@ def create_twilio_conversation(
 def build_clean_websocket_url(base_url: str, agent_id: str, conversation_id: str) -> str:
     """
     Build a clean WebSocket URL without query parameters that Twilio doesn't handle well.
-    
+
     Args:
-        base_url: Base URL from settings
+        base_url: Base URL from settings (can include https:// prefix)
         agent_id: Agent ID
         conversation_id: Conversation ID
-        
+
     Returns:
         Clean WebSocket URL path
     """
-    return f"wss://{base_url}/ws/{agent_id}/twilio/{conversation_id}"
+    # Remove any protocol prefix from base_url and use wss://
+    clean_base = base_url.replace("https://", "").replace("http://", "")
+    return f"wss://{clean_base}/ws/{agent_id}/twilio/{conversation_id}"

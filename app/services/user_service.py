@@ -107,7 +107,7 @@ class UserService:
 
             # If tenant_id provided, associate user with existing tenant
             if tenant_id:
-                tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.active == True).first()
+                tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.active).first()
                 if tenant:
                     user_tenant = UserTenant(
                         user_id=user.id,
@@ -158,7 +158,7 @@ class UserService:
         """Authenticate user and return tokens"""
         try:
             # Find user by email
-            user = db.query(User).filter(User.email == email, User.active == True).first()
+            user = db.query(User).filter(User.email == email, User.active).first()
             if not user:
                 return {"success": False, "error": "Invalid email or password"}
 
@@ -180,7 +180,7 @@ class UserService:
             # Get user tenants and roles
             user_tenants = db.query(UserTenant).filter(
                 UserTenant.user_id == user.id,
-                UserTenant.active == True
+                UserTenant.active
             ).all()
 
             tenants = []
@@ -222,7 +222,7 @@ class UserService:
                 return {"success": False, "error": "Invalid token payload"}
 
             # Find user
-            user = db.query(User).filter(User.id == user_id, User.active == True).first()
+            user = db.query(User).filter(User.id == user_id, User.active).first()
             if not user:
                 return {"success": False, "error": "User not found"}
 
@@ -247,14 +247,14 @@ class UserService:
     def request_password_reset(db: Session, email: str) -> Dict[str, Any]:
         """Generate password reset token for user"""
         try:
-            user = db.query(User).filter(User.email == email, User.active == True).first()
+            user = db.query(User).filter(User.email == email, User.active).first()
             if not user:
                 # Don't reveal if email exists
                 return {"success": True, "message": "If the email exists, a reset link will be sent"}
 
             # Generate reset token
             reset_token = UserService.generate_token()
-            reset_expires = datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+            reset_expires = datetime.utcnow() + timedelta(hours=1) # 1 hour expiry
 
             user.reset_token = reset_token
             user.reset_token_expires = reset_expires
@@ -278,7 +278,7 @@ class UserService:
             user = db.query(User).filter(
                 User.reset_token == reset_token,
                 User.reset_token_expires > datetime.utcnow(),
-                User.active == True
+                User.active
             ).first()
 
             if not user:
@@ -304,12 +304,12 @@ class UserService:
         """Add user to a tenant with specified role"""
         try:
             # Check if user exists
-            user = db.query(User).filter(User.id == user_id, User.active == True).first()
+            user = db.query(User).filter(User.id == user_id, User.active).first()
             if not user:
                 return {"success": False, "error": "User not found"}
 
             # Check if tenant exists
-            tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.active == True).first()
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.active).first()
             if not tenant:
                 return {"success": False, "error": "Tenant not found"}
 
@@ -350,7 +350,7 @@ class UserService:
             user_tenant = db.query(UserTenant).filter(
                 UserTenant.user_id == user_id,
                 UserTenant.tenant_id == tenant_id,
-                UserTenant.active == True
+                UserTenant.active
             ).first()
 
             if not user_tenant:
@@ -375,8 +375,8 @@ class UserService:
                 Tenant, UserTenant.tenant_id == Tenant.id
             ).filter(
                 UserTenant.user_id == user_id,
-                UserTenant.active == True,
-                Tenant.active == True
+                UserTenant.active,
+                Tenant.active
             ).all()
 
             tenants = []
@@ -407,8 +407,8 @@ class UserService:
                 User, UserTenant.user_id == User.id
             ).filter(
                 UserTenant.tenant_id == tenant_id,
-                UserTenant.active == True,
-                User.active == True
+                UserTenant.active,
+                User.active
             ).all()
 
             users = []

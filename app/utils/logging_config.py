@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 def setup_logging() -> logging.Logger:
     """Configure structured logging for the application"""
@@ -28,7 +28,7 @@ def setup_logging() -> logging.Logger:
 
     return logger
 
-def log_request_info(logger: logging.Logger, endpoint: str, user_id: str = None, **kwargs):
+def log_request_info(logger: logging.Logger, endpoint: str, user_id: Optional[str] = None, **kwargs: Any) -> None:
     """Log request information with context"""
     extra_info = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
     message = f"Request: {endpoint}"
@@ -38,12 +38,12 @@ def log_request_info(logger: logging.Logger, endpoint: str, user_id: str = None,
         message += f" | {extra_info}"
     logger.info(message)
 
-def log_error_with_context(logger: logging.Logger, error: Exception, context: Dict[str, Any]):
+def log_error_with_context(logger: logging.Logger, error: Exception, context: Dict[str, Any]) -> None:
     """Log errors with contextual information"""
     context_str = " | ".join([f"{k}={v}" for k, v in context.items()])
     logger.error(f"Error: {str(error)} | Context: {context_str}")
 
-def log_performance_metric(logger: logging.Logger, operation: str, duration_ms: float, **kwargs):
+def log_performance_metric(logger: logging.Logger, operation: str, duration_ms: float, **kwargs: Any) -> None:
     """Log performance metrics"""
     extra_info = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
     message = f"Performance: {operation} | duration_ms={duration_ms:.2f}"

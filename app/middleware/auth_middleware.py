@@ -75,7 +75,7 @@ class RoleBasedAccessControl:
             user_tenant = db.query(UserTenant).filter(
                 UserTenant.user_id == user_id,
                 UserTenant.tenant_id == tenant_id,
-                UserTenant.active == True
+                UserTenant.active
             ).first()
             
             if not user_tenant:
@@ -112,7 +112,7 @@ class RoleBasedAccessControl:
             user_tenant = db.query(UserTenant).filter(
                 UserTenant.user_id == user_id,
                 UserTenant.tenant_id == tenant_id,
-                UserTenant.active == True
+                UserTenant.active
             ).first()
             
             return user_tenant.role if user_tenant else None
@@ -127,7 +127,7 @@ class RoleBasedAccessControl:
         try:
             user_tenants = db.query(UserTenant).filter(
                 UserTenant.user_id == user_id,
-                UserTenant.active == True
+                UserTenant.active
             ).all()
             
             tenants_with_roles = []

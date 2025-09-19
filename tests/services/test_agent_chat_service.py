@@ -1,6 +1,5 @@
 import pytest
 from app.services.agent_chat_service import AgentChatService
-from app.utils.agent_config_builder import AgentConfigBuilder
 
 class DummyAgent:
     id = "agent1"

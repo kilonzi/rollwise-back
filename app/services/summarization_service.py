@@ -7,6 +7,7 @@ import os
 
 # Models are imported within functions to avoid circular imports
 from app.services.message_service import MessageService
+from app.utils.logging_config import app_logger as logger
 
 
 class SummarizationService:
@@ -25,7 +26,7 @@ class SummarizationService:
         messages = message_service.get_messages_for_summary(conversation_id)
 
         if not messages:
-            print(f"📝 No messages found for conversation {conversation_id}")
+            logger.info("No messages found for conversation %s", conversation_id)
             return None
 
         # Format messages for LLM
@@ -50,11 +51,11 @@ class SummarizationService:
                 "generated_at": messages[-1]["timestamp"] if messages else None
             }
 
-            print(f"📝 Generated summary for conversation {conversation_id}: {len(summary)} chars")
+            logger.info("Generated summary for conversation %s: %d chars", conversation_id, len(summary))
             return summary_data
 
         except Exception as e:
-            print(f"❌ Error generating summary: {str(e)}")
+            logger.exception("Error generating summary for conversation %s: %s", conversation_id, str(e))
             return {
                 "conversation_id": conversation_id,
                 "summary": "Summary generation failed",
@@ -141,7 +142,7 @@ Keep the summary professional, detailed, and focused on business-relevant inform
         from app.services.conversation_service import ConversationService
 
         if not summary_data or summary_data.get('error'):
-            print(f"⚠️ No valid summary to store for conversation {conversation_id}")
+            logger.warning("No valid summary to store for conversation %s", conversation_id)
             return False
 
         try:
@@ -156,12 +157,12 @@ Keep the summary professional, detailed, and focused on business-relevant inform
             )
 
             if success:
-                print(f"✅ Stored conversation summary in database for {conversation_id}")
+                logger.info("Stored conversation summary in database for %s", conversation_id)
             else:
-                print(f"❌ Failed to store summary for {conversation_id}")
+                logger.error("Failed to store summary for %s", conversation_id)
 
             return success
 
         except Exception as e:
-            print(f"❌ Error storing summary: {str(e)}")
+            logger.exception("Error storing summary for conversation %s: %s", conversation_id, str(e))
             return False

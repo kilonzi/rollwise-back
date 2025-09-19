@@ -86,7 +86,9 @@ class Agent(Base):
     name = Column(String, nullable=False)
     phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
-    voice_model = Column(String, default="aura-2-thalia-en")
+    voice_model = Column(String, default="aura-2-thalia-en")  # Deepgram voice model (fallback)
+    eleven_labs_voice_id = Column(String, nullable=True)  # ElevenLabs voice ID
+    voice_provider = Column(String, default="eleven_labs")  # "eleven_labs" or "deepgram"
     system_prompt = Column(Text, default="You are a helpful AI assistant.")
     language = Column(String, default="en")
     tools = Column(JSON, default=list)  # List of enabled tool names
@@ -95,11 +97,12 @@ class Agent(Base):
     calendar_id = Column(String, nullable=True)  # Google Calendar ID
     business_hours = Column(JSON, nullable=True)  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
     default_slot_duration = Column(Integer, default=30)  # minutes
-    max_daily_appointments = Column(Integer, default=8)
-    buffer_time = Column(Integer, default=15)  # minutes between appointments
+    max_slot_appointments = Column(Integer, default=1)  # max appointments per time slot to prevent overbooking
+    buffer_time = Column(Integer, default=10)  # minutes between appointments
     blocked_dates = Column(JSON, nullable=True)  # ["2024-12-25", "2024-01-01"] - dates when agent is unavailable
     invitees = Column(JSON, nullable=True)  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
     booking_enabled = Column(Boolean, default=True)  # Whether calendar booking is enabled for this agent
+
 
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
@@ -108,6 +111,7 @@ class Agent(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="agents")
     conversations = relationship("Conversation", back_populates="agent")
+    board = relationship("Board", back_populates="agent", uselist=False)
 
 
 class Conversation(Base):
@@ -172,27 +176,74 @@ class ToolCall(Base):
     conversation = relationship("Conversation", back_populates="tool_calls")
 
 
-class BusinessDataset(Base):
-    __tablename__ = "business_datasets"
+class Board(Base):
+    __tablename__ = "boards"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: str = Column(String, ForeignKey("tenants.id"), nullable=False, index=True)
-    agent_id: str = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
-    label: str = Column(String, nullable=False, index=True)  # clients, hours, inventory, pricing, etc.
-    file_name: str = Column(String, nullable=False)
-    file_path: str = Column(String, nullable=False)  # where file was stored
-    file_type: str = Column(String, nullable=False)  # csv, txt, pdf
-    record_count: int = Column(Integer, default=0)  # number of records processed
-    uploaded_at: Column = Column(DateTime, default=func.now())
-    processed_at: Column = Column(DateTime, nullable=True)  # when ChromaDB ingestion completed
-    columns: list = Column(JSON, default=list)  # critical columns to include as metadata
-    extra_info: dict = Column(JSON, default=dict)  # additional metadata
-    active: bool = Column(Boolean, default=True)
-    created_at: Column = Column(DateTime, default=func.now())
-    updated_at: Column = Column(DateTime, default=func.now(), onupdate=func.now())
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, unique=True)
+    name = Column(String, nullable=False, default="Agent Board")
+    lanes = Column(JSON, default=lambda: [
+        {"id": "new", "name": "New", "color": "#2196F3", "wipLimit": None},
+        {"id": "in_progress", "name": "In Progress", "color": "#FF9800", "wipLimit": 5},
+        {"id": "done", "name": "Done", "color": "#4CAF50", "wipLimit": None}
+    ])
+    labels = Column(JSON, default=lambda: [
+        {"id": "urgent", "name": "Urgent", "color": "#F44336"},
+        {"id": "vip", "name": "VIP Customer", "color": "#9C27B0"},
+        {"id": "delivery", "name": "Delivery", "color": "#607D8B"},
+        {"id": "takeout", "name": "Takeout", "color": "#795548"}
+    ])
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    tenant = relationship("Tenant")
+    agent = relationship("Agent", back_populates="board")
+    items = relationship("BoardItem", back_populates="board", cascade="all, delete-orphan")
+
+
+class BoardItem(Base):
+    __tablename__ = "board_items"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    board_id = Column(String, ForeignKey("boards.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    lane_id = Column(String, nullable=False, default="new")
+    labels = Column(JSON, default=list)  # List of label IDs from board labels
+    priority = Column(String, default="medium")  # low, medium, high, urgent
+    assignee = Column(String, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    item_metadata = Column(JSON, default=dict)  # Additional data like conversation_id, caller_info, etc.
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    board = relationship("Board", back_populates="items")
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)  # slugified with underscores
+    display_name = Column(String, nullable=False)  # original user input
+    description = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    file_path = Column(String(500), nullable=True)  # store/collections/{id}.{ext}
+    file_type = Column(String(10), nullable=True)  # pdf, txt, csv, text
+    content_type = Column(String(50), nullable=True)  # auto-detected: menu, policy, faq, etc.
+    chunk_count = Column(Integer, default=0)
+    chroma_collection_name = Column(String, nullable=False)  # collection__{id}
+    status = Column(String(20), default="processing")  # processing, ready, error
+    error_message = Column(Text, nullable=True)  # error details if processing failed
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
     agent = relationship("Agent")
 
 

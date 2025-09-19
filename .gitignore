@@ -193,9 +193,7 @@ calls.db
 node_modules/
 # Rollwise frontend/archive
 rollwise-front.zip
-# Build artifacts
-dist/
-build/
+# Build artifacts (kept in Distribution section above)
 # Ensure virtual envs and IDE settings are ignored
 .venv/
 .pip-wheel-cache/

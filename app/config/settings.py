@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Business Configuration
     BUSINESS_NAME: str = os.getenv("BUSINESS_NAME", "Your Business")
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate required settings after initialization"""
         if not self.SECRET_KEY:
             raise ValueError("SECRET_KEY environment variable is required for security")
@@ -66,4 +66,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-settings.__post_init__()

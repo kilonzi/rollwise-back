@@ -3,7 +3,6 @@ Calendar Tools for AI Agent Integration
 Provides 5 calendar management functions exposed to the AI model
 """
 
-import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session

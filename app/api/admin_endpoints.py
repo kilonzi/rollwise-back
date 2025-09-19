@@ -58,7 +58,7 @@ class AgentUpdate(BaseModel):
     calendar_id: Optional[str] = None  # Google Calendar ID
     business_hours: Optional[Dict[str, Any]] = None  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
     default_slot_duration: Optional[int] = None
-    max_daily_appointments: Optional[int] = None
+    max_slot_appointments: Optional[int] = None  # max appointments per time slot
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None  # ["2024-12-25", "2024-01-01"]
     invitees: Optional[List[Dict[str, Any]]] = None  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}]
@@ -93,7 +93,7 @@ class AgentResponse(BaseModel):
     calendar_id: Optional[str] = None
     business_hours: Optional[Dict[str, Any]] = None
     default_slot_duration: Optional[int] = None
-    max_daily_appointments: Optional[int] = None
+    max_slot_appointments: Optional[int] = None
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None
     invitees: Optional[List[Dict[str, Any]]] = None
@@ -123,7 +123,7 @@ async def create_tenant(tenant: TenantCreate, db: Session = Depends(get_db)):
         db.add(db_tenant)
         db.commit()
         db.refresh(db_tenant)
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -255,7 +255,7 @@ async def create_agent(agent: AgentCreate, db: Session = Depends(get_db)):
         db.add(db_agent)
         db.commit()
         db.refresh(db_agent)
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -275,7 +275,7 @@ async def create_agent(agent: AgentCreate, db: Session = Depends(get_db)):
         calendar_id=db_agent.calendar_id,
         business_hours=db_agent.business_hours,
         default_slot_duration=db_agent.default_slot_duration,
-        max_daily_appointments=db_agent.max_daily_appointments,
+        max_slot_appointments=db_agent.max_slot_appointments,
         buffer_time=db_agent.buffer_time,
         blocked_dates=db_agent.blocked_dates,
         active=db_agent.active,
@@ -314,7 +314,7 @@ async def list_agents(
             calendar_id=a.calendar_id,
             business_hours=a.business_hours,
             default_slot_duration=a.default_slot_duration,
-            max_daily_appointments=a.max_daily_appointments,
+            max_slot_appointments=a.max_slot_appointments,
             buffer_time=a.buffer_time,
             blocked_dates=a.blocked_dates,
             active=a.active,
@@ -345,7 +345,7 @@ async def get_agent(agent_id: str, db: Session = Depends(get_db)):
         calendar_id=agent.calendar_id,
         business_hours=agent.business_hours,
         default_slot_duration=agent.default_slot_duration,
-        max_daily_appointments=agent.max_daily_appointments,
+        max_slot_appointments=agent.max_slot_appointments,
         buffer_time=agent.buffer_time,
         blocked_dates=agent.blocked_dates,
         active=agent.active,
@@ -384,8 +384,8 @@ async def update_agent(
         agent.business_hours = agent_update.business_hours
     if agent_update.default_slot_duration is not None:
         agent.default_slot_duration = agent_update.default_slot_duration
-    if agent_update.max_daily_appointments is not None:
-        agent.max_daily_appointments = agent_update.max_daily_appointments
+    if agent_update.max_slot_appointments is not None:
+        agent.max_slot_appointments = agent_update.max_slot_appointments
     if agent_update.buffer_time is not None:
         agent.buffer_time = agent_update.buffer_time
     if agent_update.blocked_dates is not None:
@@ -410,7 +410,7 @@ async def update_agent(
         calendar_id=agent.calendar_id,
         business_hours=agent.business_hours,
         default_slot_duration=agent.default_slot_duration,
-        max_daily_appointments=agent.max_daily_appointments,
+        max_slot_appointments=agent.max_slot_appointments,
         buffer_time=agent.buffer_time,
         blocked_dates=agent.blocked_dates,
         active=agent.active,

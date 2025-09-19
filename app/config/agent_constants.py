@@ -319,6 +319,44 @@ FUNCTION_DEFINITIONS = [
                 }
             }
         }
+    },
+    {
+        "name": "search_collection",
+        "description": """Search a specific document collection for relevant information.
+
+        Use this function to search through uploaded documents, PDFs, CSV files, or text content
+        that has been organized into named collections. Each collection contains specific business
+        information like menus, policies, procedures, client data, etc.
+
+        When customers ask questions about information that might be in your knowledge base,
+        use this function with the appropriate collection name and search terms.
+
+        Examples:
+        - "What's on your menu?" → search_collection(collection_name="restaurant_menu", query="menu items dishes")
+        - "What's your delivery policy?" → search_collection(collection_name="policies", query="delivery rules")
+        - "Do you have John's contact info?" → search_collection(collection_name="clients", query="John contact")
+        """,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "collection_name": {
+                    "type": "string",
+                    "description": "Name of the collection to search (e.g., 'restaurant_menu', 'policies', 'clients')"
+                },
+                "query": {
+                    "type": "string",
+                    "description": "What you're looking for in natural language"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (default 10, max 50)",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 50
+                }
+            },
+            "required": ["collection_name", "query"]
+        }
     }
 ]
 
@@ -342,7 +380,7 @@ LISTEN_SETTINGS = {
 }
 
 
-def get_think_settings():
+def get_think_settings() -> Dict[str, Any]:
     """Get think settings with function definitions"""
     return {
         "provider": {

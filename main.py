@@ -4,36 +4,36 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.admin_endpoints import router as admin_router
 from app.api.twilio_endpoints import router as twilio_router
-from app.api.dataset_endpoints import router as dataset_router
 from app.api.user_endpoints import router as user_router
 from app.config.settings import settings
 from app.models import create_tables
+from app.utils.logging_config import app_logger as logger
 
 
 @asynccontextmanager
 async def lifespan(fapp: FastAPI):
-    print("🚀 Starting RollWise Multi-Tenant AI Voice Agent Platform...")
-    print(f"📊 Database: {settings.DATABASE_URL}")
-    print(f"🌐 Base URL: {settings.BASE_URL}")
-    print(
-        f"🎤 Deepgram API: {'✅ Configured' if settings.DEEPGRAM_API_KEY else '❌ Not configured'}"
+    logger.info("🚀 Starting RollWise Multi-Tenant AI Voice Agent Platform...")
+    logger.info("📊 Database: %s", settings.DATABASE_URL)
+    logger.info("🌐 Base URL: %s", settings.BASE_URL)
+    logger.info(
+        "🎤 Deepgram API: %s",
+        "✅ Configured" if settings.DEEPGRAM_API_KEY else "❌ Not configured",
     )
     create_tables()
-    print("✅ Database tables created/verified")
-    print("📋 Multi-tenant schema ready:")
-    print("   - Tenants (businesses)")
-    print("   - Users (tenant members)")
-    print("   - Agents (AI voice agents)")
-    print("   - Conversations (call/SMS sessions)")
-    print("   - Messages (chronological conversation content)")
-    print("   - ToolCalls (function execution logs)")
-    print("   - BusinessDatasets (ChromaDB knowledge)")
+    logger.info("✅ Database tables created/verified")
+    logger.info("📋 Multi-tenant schema ready:")
+    logger.info("   - Tenants (businesses)")
+    logger.info("   - Users (tenant members)")
+    logger.info("   - Agents (AI voice agents)")
+    logger.info("   - Conversations (call/SMS sessions)")
+    logger.info("   - Messages (chronological conversation content)")
+    logger.info("   - ToolCalls (function execution logs)")
+    logger.info("   - BusinessDatasets (ChromaDB knowledge)")
 
-    print("\n🎯 Platform ready for multi-tenant agent deployment!")
-    print(f"📡 Admin API: http://{settings.HOST}:{settings.PORT}/admin/")
-    print(f"📖 API Docs: http://{settings.HOST}:{settings.PORT}/docs")
+    logger.info("🎯 Platform ready for multi-tenant agent deployment!")
+    logger.info("📡 Admin API: http://%s:%s/admin/", settings.HOST, settings.PORT)
+    logger.info("📖 API Docs: http://%s:%s/docs", settings.HOST, settings.PORT)
     yield
 
 
@@ -55,8 +55,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(twilio_router, tags=["twilio"])
-app.include_router(admin_router, tags=["admin"])
-app.include_router(dataset_router, tags=["datasets"])
 app.include_router(user_router, prefix="/users", tags=["users"])
 
 

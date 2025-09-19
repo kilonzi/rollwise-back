@@ -6,6 +6,7 @@ This uses the new Deepgram-aligned system.
 
 import requests
 from pathlib import Path
+from app.utils.logging_config import app_logger as logger
 
 # Configuration
 BASE_URL = "http://localhost:8090"
@@ -38,7 +39,7 @@ Beard Trim,$15,15 min,Beard shaping and trim"""
 
 def upload_datasets():
     """Upload sample business datasets"""
-    print("📊 Uploading business datasets...")
+    logger.info("Uploading business datasets...")
 
     datasets = [
         ("clients", CLIENT_DATA),
@@ -68,21 +69,21 @@ def upload_datasets():
 
             if response.status_code == 200:
                 result = response.json()
-                print(f"✅ Uploaded {label}: {result['record_count']} records")
+                logger.info("Uploaded %s: %s records", label, result.get('record_count'))
             else:
-                print(f"❌ Failed to upload {label}: {response.text}")
+                logger.error("Failed to upload %s: %s", label, response.text)
 
         finally:
             # Clean up
             if temp_file.exists():
                 temp_file.unlink()
 
-    print("\n🎉 Upload complete!")
+    logger.info("Upload complete!")
 
 
 def test_search():
     """Test the search functionality"""
-    print("🔍 Testing search...")
+    logger.info("Testing search...")
 
     test_queries = [
         {"label": "clients", "query": "John", "description": "Search for John"},
@@ -91,7 +92,7 @@ def test_search():
     ]
 
     for query in test_queries:
-        print(f"\n• {query['description']}")
+        logger.info("%s", query['description'])
         response = requests.post(
             f"{BASE_URL}/datasets/search/{AGENT_ID}",
             json=query
@@ -99,52 +100,45 @@ def test_search():
 
         if response.status_code == 200:
             result = response.json()
-            if result["success"] and result["count"] > 0:
-                print(f"  ✅ Found {result['count']} results")
+            if result.get("success") and result.get("count", 0) > 0:
+                logger.info("Found %s results", result.get('count'))
             else:
-                print(f"  ℹ️  No results found")
+                logger.info("No results found")
         else:
-            print(f"  ❌ Error: {response.status_code}")
+            logger.error("Error searching: %s", response.status_code)
 
 
 def show_examples():
     """Show usage examples"""
-    print("\n" + "="*60)
-    print("🎤 VOICE INTERACTION EXAMPLES")
-    print("="*60)
+    logger.info("VOICE INTERACTION EXAMPLES")
 
-    print("\nYour agent can now answer:")
-    print()
-    print("👤 Customer: 'What are your hours?'")
-    print("🤖 Agent: Searches 'hours' dataset and responds with business hours")
-    print()
-    print("👤 Customer: 'Do you have John Smith's phone number?'")
-    print("🤖 Agent: Searches 'clients' for 'John Smith' and provides contact info")
-    print()
-    print("👤 Customer: 'How much is a haircut?'")
-    print("🤖 Agent: Searches 'pricing' for 'haircut' and provides price")
-    print()
-    print("👤 Customer: 'What services do you offer?'")
-    print("🤖 Agent: Searches 'pricing' dataset and lists all services")
+    logger.info("Your agent can now answer:")
+    logger.info("Customer: 'What are your hours?'")
+    logger.info("Agent: Searches 'hours' dataset and responds with business hours")
+    logger.info("Customer: 'Do you have John Smith's phone number?'")
+    logger.info("Agent: Searches 'clients' for 'John Smith' and provides contact info")
+    logger.info("Customer: 'How much is a haircut?'")
+    logger.info("Agent: Searches 'pricing' for 'haircut' and provides price")
+    logger.info("Customer: 'What services do you offer?'")
+    logger.info("Agent: Searches 'pricing' dataset and lists all services")
 
-    print("\n🔧 How it works:")
-    print("• Agent automatically uses search_agent_dataset function")
-    print("• Deepgram calls the function with appropriate parameters")
-    print("• ChromaDB searches your uploaded data")
-    print("• Agent responds naturally with the information")
+    logger.info("How it works:")
+    logger.info("• Agent automatically uses search_agent_dataset function")
+    logger.info("• Deepgram calls the function with appropriate parameters")
+    logger.info("• ChromaDB searches your uploaded data")
+    logger.info("• Agent responds naturally with the information")
 
-    print(f"\n🌐 Your agent is ready at:")
-    print(f"   Voice: {BASE_URL}/agent/{AGENT_ID}/voice")
-    print(f"   WebSocket: wss://your-domain/ws/{AGENT_ID}/twilio")
+    logger.info("Your agent is ready at:")
+    logger.info("   Voice: %s/agent/%s/voice", BASE_URL, AGENT_ID)
+    logger.info("   WebSocket: wss://your-domain/ws/%s/twilio", AGENT_ID)
 
 
 def main():
     """Main setup function"""
-    print("🚀 RollWise Agent Setup (Deepgram System)")
-    print("="*50)
+    logger.info("RollWise Agent Setup (Deepgram System)")
 
     if not AGENT_ID or AGENT_ID == "your-agent-id-here":
-        print("❌ Please update AGENT_ID in the script with your actual agent ID")
+        logger.error("Please update AGENT_ID in the script with your actual agent ID")
         return
 
     # Upload datasets
@@ -156,9 +150,8 @@ def main():
     # Show examples
     show_examples()
 
-    print("\n✅ Setup complete! Your agent now has dataset search capabilities.")
-    print("\nThe agent will automatically use the search_agent_dataset function")
-    print("when customers ask questions about your business data.")
+    logger.info("Setup complete! Your agent now has dataset search capabilities.")
+    logger.info("The agent will automatically use the search_agent_dataset function when customers ask questions about your business data.")
 
 
 if __name__ == "__main__":
