@@ -15,7 +15,7 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
     result = UserService.register_user(
         db=db,
         name=user_data.name,
-        email=user_data.email,
+        email=str(user_data.email),
         password=user_data.password,
         phone_number=user_data.phone_number,
         tenant_id=user_data.tenant_id,
@@ -38,7 +38,7 @@ async def register_user(user_data: UserRegistration, db: Session = Depends(get_d
 @router.post("/login")
 async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     """Authenticate user and return tokens"""
-    result = UserService.login_user(db, login_data.email, login_data.password)
+    result = UserService.login_user(db, str(login_data.email), login_data.password)
 
     if not result["success"]:
         raise HTTPException(
@@ -69,7 +69,7 @@ async def request_password_reset(
     db: Session = Depends(get_db)
 ):
     """Request password reset token"""
-    result = UserService.request_password_reset(db, reset_request.email)
+    result = UserService.request_password_reset(db, str(reset_request.email))
 
     return {
         "message": result["message"],
@@ -93,4 +93,3 @@ async def reset_password(reset_data: PasswordReset, db: Session = Depends(get_db
         )
 
     return {"message": result["message"]}
-

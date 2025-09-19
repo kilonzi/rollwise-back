@@ -4,8 +4,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.twilio_endpoints import router as twilio_router
-from app.api.routers import auth, users, tenants, agents, conversations
+from app.api.routers import auth, users, tenants, agents, conversations, twilio
 from app.config.settings import settings
 from app.models import create_tables
 from app.utils.logging_config import app_logger as logger
@@ -54,7 +53,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(twilio_router, tags=["Twilio"])
+app.include_router(twilio.router, tags=["Twilio"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(tenants.router, tags=["Tenants"])
