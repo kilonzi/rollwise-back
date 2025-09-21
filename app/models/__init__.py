@@ -9,6 +9,7 @@ from .database import (
     Order,
     OrderItem,
     Collection,
+    MenuItem,
     get_db,
     create_tables
 )
@@ -24,6 +25,7 @@ __all__ = [
     "Collection",
     "Order",
     "OrderItem",
+    "MenuItem",
     "get_db",
     "create_tables"
 ]

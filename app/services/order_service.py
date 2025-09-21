@@ -1,13 +1,42 @@
-from typing import Dict, Any, Optional, List
-from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, date, timezone
+from typing import Dict, Any, Optional, List
 
-from app.models import Agent, Order, OrderItem
+from sqlalchemy.orm import Session, joinedload
+
+from app.models import Agent, Order, OrderItem, Conversation
 from app.utils.logging_config import app_logger
 
 
 class OrderService:
     """Service for managing orders directly linked to agents"""
+
+    db: Session
+
+    def create_preemptive_order(self, conversation: Conversation) -> None:
+        """Create a preemptive order when a conversation starts"""
+        try:
+            from app.models import Order
+            preemptive_order = Order(
+                agent_id=conversation.agent_id,
+                conversation_id=conversation.id,
+                customer_phone=conversation.caller_phone,
+                customer_name="",
+                status="new",
+                total_price=0.0,
+                active=False
+            )
+            self.db.add(preemptive_order)
+            self.db.commit()
+
+            app_logger.info(f"Created preemptive order for conversation {conversation.id}")
+
+        except Exception as e:
+            # Don't fail the conversation creation if order creation fails
+            app_logger.error(f"Failed to create preemptive order for conversation {conversation.id}: {str(e)}")
+            # Rollback any partial order creation, but keep the conversation
+            self.db.rollback()
+            # Re-commit the conversation
+            self.db.commit()
 
     @staticmethod
     def create_order(db: Session, agent_id: str, order_data: Dict[str, Any]) -> Order:
@@ -73,10 +102,10 @@ class OrderService:
 
     @staticmethod
     def get_agent_orders(
-        db: Session,
-        agent_id: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+            db: Session,
+            agent_id: str,
+            start_date: Optional[date] = None,
+            end_date: Optional[date] = None
     ) -> List[Order]:
         """Get all orders for a specific agent with optional date filtering"""
         try:

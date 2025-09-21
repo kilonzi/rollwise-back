@@ -17,9 +17,15 @@ class DeepgramService:
         if not settings.DEEPGRAM_API_KEY:
             raise ValueError("DEEPGRAM_API_KEY is required")
 
+        from app.utils.logging_config import app_logger
+        app_logger.info(f"Connecting to Deepgram Agent API with key: {settings.DEEPGRAM_API_KEY[:8]}...")
+
         return websockets.connect(
             "wss://agent.deepgram.com/v1/agent/converse",
             subprotocols=["token", settings.DEEPGRAM_API_KEY],
+            ping_interval=20,
+            ping_timeout=10,
+            close_timeout=10
         )
 
     async def send_config(self, websocket):

@@ -158,38 +158,3 @@ async def delete_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to delete agent: {str(e)}"
         )
-
-
-@router.put("/{agent_id}/phone")
-async def assign_agent_phone_number(
-        agent_id: str,
-        phone_data: PhoneNumberAssignment,
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """Assign a phone number to an agent"""
-    agent = db.query(Agent).filter(
-        Agent.id == agent_id,
-        Agent.user_id == current_user.id,
-        Agent.active
-    ).first()
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-
-    agent_service = AgentService(db)
-    result = agent_service.assign_phone_number(agent_id, phone_data.phone_number)
-
-    if not result["success"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result["error"]
-        )
-
-    return {
-        "message": result["message"],
-        "agent_id": result["agent_id"],
-        "phone_number": result["phone_number"]
-    }

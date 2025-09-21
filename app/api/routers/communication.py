@@ -3,23 +3,23 @@ import base64
 import json
 import time
 import uuid
-from typing import Optional, List
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from fastapi import APIRouter, Request, WebSocket, Form, HTTPException, Depends
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 from twilio.twiml.voice_response import VoiceResponse, Connect
 
-from app.config.agent_functions import FUNCTION_MAP
 from app.config.settings import settings
 from app.models import Agent, Conversation, ToolCall, Message, get_db
 from app.services.agent_service import AgentService
 from app.services.audio_service import AudioService
 from app.services.conversation_service import ConversationService
 from app.services.deepgram_service import DeepgramService
-from app.tools.order_tools import create_order
+from app.services.order_service import OrderService
+from app.tools.registry import global_registry
 from app.utils.logging_config import app_logger as logger
 from app.utils.twilio_utils import (
     extract_twilio_form_data,
@@ -57,12 +57,15 @@ async def handle_agent_voice_call(
             db=db
         )
 
-
-
-
-
-
-
+        try:
+            order_service = OrderService()
+            order_service.db = db  # Set the database session
+            order_service.create_preemptive_order(conversation)
+            logger.info("[ORDER] Preemptive order created for conversation %s", conversation.id)
+        except Exception as order_error:
+            logger.error("[ORDER] Failed to create preemptive order for conversation %s: %s",
+                         conversation.id, str(order_error))
+            # Don't fail the call if order creation fails
 
         logger.info("[VOICE] Conversation created: %s", conversation.id)
 
@@ -205,15 +208,26 @@ async def agent_websocket_handler(
         user_audio_buffer = []
         agent_audio_buffer = []
 
-        agent_config = agent_service.build_comprehensive_agent_config(agent)
+        agent_config = agent_service.build_agent_config(
+            agent=agent,
+            phone_number=conversation.caller_phone,
+            conversation_id=conversation.id
+        )
+
+        logger.info(
+            f"[WS] Built agent config with {len(agent_config.get('agent', {}).get('think', {}).get('functions', []))} functions")
+
+        if not agent_config:
+            logger.error("[WS] Failed to build agent configuration")
+            await websocket.close(code=1011, reason="Agent configuration error")
+            return
+
         deepgram_service = DeepgramService(agent_config)
         logger.info("[DEEPGRAM] Service created with comprehensive config")
 
         async with deepgram_service.connect() as dg_connection:
             deepgram_ws = dg_connection
             logger.info("[DEEPGRAM] Connected to Deepgram")
-            await deepgram_service.send_config(deepgram_ws)
-            logger.info("[DEEPGRAM] Configuration sent")
 
             async def cleanup_resources():
                 nonlocal cleanup_completed
@@ -334,6 +348,18 @@ async def agent_websocket_handler(
                 asyncio.create_task(deepgram_receiver()),
                 asyncio.create_task(twilio_receiver()),
             ]
+
+            # Add delay and error handling for config send
+            try:
+                await deepgram_service.send_config(deepgram_ws)
+                logger.info("[DEEPGRAM] Configuration sent successfully")
+                # Small delay to let Deepgram process the config
+                await asyncio.sleep(0.1)
+            except Exception as config_error:
+                logger.error(f"[DEEPGRAM] Failed to send configuration: {config_error}")
+                await cleanup_resources()
+                return
+
             await asyncio.gather(*tasks, return_exceptions=True)
             await cleanup_resources()
 
@@ -374,22 +400,25 @@ async def handle_deepgram_event(
 async def execute_tenant_tool(
         tool_name: str, tool_args: dict, conversation: Conversation, db_session: Session
 ) -> dict:
-    """Execute a tool within the tenant context."""
+    """Execute a tool within the tenant context using the unified registry."""
     tool_call = None
     start_time = time.time()
     try:
-        if tool_name not in FUNCTION_MAP:
-            logger.error("Tool '%s' not found in FUNCTION_MAP", tool_name)
+        # Check if tool exists in the unified registry
+        if tool_name not in global_registry.tools:
+            logger.error("Tool '%s' not found in registry", tool_name)
             return {"success": False, "error": f"Tool '{tool_name}' not found"}
 
         logger.info("Function call received: %s with params: %s", tool_name, tool_args)
 
+        # Add agent_id for tools that need it
         if tool_name in ["search_collection"]:
             tool_args["agent_id"] = conversation.agent_id
         elif tool_name in ["create_calendar_event", "list_calendar_events", "cancel_calendar_event",
                            "search_calendar_events", "update_calendar_event"]:
             tool_args["agent_id"] = conversation.agent_id
 
+        # Create tool call record
         tool_call = ToolCall(
             conversation_id=conversation.id,
             tool_name=tool_name,
@@ -399,8 +428,8 @@ async def execute_tenant_tool(
         db_session.add(tool_call)
         db_session.commit()
 
-        tool_function = FUNCTION_MAP[tool_name]
-        result = await tool_function(**tool_args)
+        # Execute the tool using the registry
+        result = await global_registry.execute_tool(tool_name, tool_args, conversation.id)
 
         if isinstance(result, dict) and result.get("action") == "hangup":
             result["_trigger_close"] = True
@@ -522,10 +551,10 @@ async def handle_conversation_text(
 
         # Get the next sequence number for this conversation
         max_sequence = (
-            db_session.query(func.max(Message.sequence_number))
-            .filter(Message.conversation_id == conversation.id)
-            .scalar()
-        ) or 0
+                           db_session.query(func.max(Message.sequence_number))
+                           .filter(Message.conversation_id == conversation.id)
+                           .scalar()
+                       ) or 0
 
         # Create new message directly
         message = Message(

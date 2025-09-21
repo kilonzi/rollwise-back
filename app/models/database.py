@@ -80,6 +80,7 @@ class Agent(Base):
     conversations = relationship("Conversation", back_populates="agent")
     orders = relationship("Order", back_populates="agent")
     board = relationship("Board", back_populates="agent", uselist=False)
+    menu_items = relationship("MenuItem", back_populates="agent")
 
 
 class Conversation(Base):
@@ -166,6 +167,7 @@ class Board(Base):
     # Relationships
     agent = relationship("Agent", back_populates="board")
 
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -224,6 +226,40 @@ class Collection(Base):
     agent = relationship("Agent")
 
 
+class MenuItem(Base):
+    __tablename__ = "menu_items"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
+    number = Column(String, nullable=True, index=True)  # unique identifier/menu number
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    category = Column(String(50), nullable=False, index=True)  # Appetizer, Entree, Drink, Dessert
+    price = Column(Float, nullable=False)
+    allergens = Column(Text, nullable=True)  # JSON array or comma-separated
+    ingredients = Column(Text, nullable=True)
+    prep_time = Column(Integer, nullable=True)  # minutes
+    notes = Column(Text, nullable=True)
+
+    # Action flags/toggles
+    available = Column(Boolean, default=True)
+    is_popular = Column(Boolean, default=False)
+    is_special = Column(Boolean, default=False)
+    is_new = Column(Boolean, default=False)
+    is_limited_time = Column(Boolean, default=False)
+    is_hidden = Column(Boolean, default=False)
+    requires_age_check = Column(Boolean, default=False)
+    has_discount = Column(Boolean, default=False)
+
+    # Metadata
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    agent = relationship("Agent", back_populates="menu_items")
+
+
 
 def get_db_session():
     return SessionLocal()
@@ -233,7 +269,6 @@ def create_tables():
 
 def get_db():
     db = get_db_session()
-    print("Database session created")
     try:
         yield db
     finally:

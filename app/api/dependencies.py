@@ -28,7 +28,6 @@ async def get_current_user(
     """
     token = credentials.credentials
     payload = UserService.verify_token(token)
-    print("Payload:", payload)  # Debugging line to print the payload
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

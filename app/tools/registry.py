@@ -129,6 +129,22 @@ global_registry = ToolRegistry()
 # Auto-import and register order tools
 try:
     from app.tools import order_tools
+    # Check if add_order_item exists and register it manually
+    if hasattr(order_tools, 'add_order_item') and hasattr(order_tools.add_order_item, '_tool_name'):
+        tool_func = order_tools.add_order_item
+        global_registry.register(
+            name=tool_func._tool_name,
+            description=tool_func._tool_description,
+            parameters=tool_func._tool_parameters
+        )(tool_func)
+        logger.info("Successfully registered add_order_item tool from order_tools")
     logger.info("Order tools loaded and registered successfully")
 except ImportError as e:
     logger.warning(f"Failed to load order tools: {e}")
+
+# Auto-import and register legacy tools
+try:
+    from app.tools import legacy_tools
+    logger.info("Legacy tools loaded and registered successfully")
+except ImportError as e:
+    logger.warning(f"Failed to load legacy tools: {e}")

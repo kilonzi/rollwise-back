@@ -38,37 +38,11 @@ class ConversationService:
         self.db.add(conversation)
         self.db.commit()
         self.db.refresh(conversation)
-
-        # Automatically create a preemptive order for this conversation
-        self._create_preemptive_order(conversation)
+        logger.info("Created new conversation %s for agent %s", conversation.id, agent_id)
 
         return conversation
 
-    def _create_preemptive_order(self, conversation: Conversation) -> None:
-        """Create a preemptive order when a conversation starts"""
-        try:
-            from app.models import Order
-            preemptive_order = Order(
-                agent_id=conversation.agent_id,
-                conversation_id=conversation.id,
-                customer_phone=conversation.caller_phone,
-                customer_name="",
-                status="new",
-                total_price=0.0,
-                active=False
-            )
-            self.db.add(preemptive_order)
-            self.db.commit()
 
-            logger.info(f"Created preemptive order for conversation {conversation.id}")
-
-        except Exception as e:
-            # Don't fail the conversation creation if order creation fails
-            logger.error(f"Failed to create preemptive order for conversation {conversation.id}: {str(e)}")
-            # Rollback any partial order creation, but keep the conversation
-            self.db.rollback()
-            # Re-commit the conversation
-            self.db.commit()
 
     def end_conversation(self, conversation_id: str) -> bool:
         """End a conversation and calculate duration"""

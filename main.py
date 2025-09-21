@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import users, agents, conversations, communication, orders, statistics, collections
+from app.api.routers import users, agents, conversations, communication, orders, statistics, collections, menu_items
 from app.config.settings import settings
 from app.models import create_tables
 from app.utils.logging_config import app_logger as logger
@@ -51,6 +51,7 @@ app.include_router(communication.router, tags=["Twilio"])
 app.include_router(users.router, prefix="/auth", tags=["Auth"])
 app.include_router(agents.router, prefix="/agents", tags=["Agents"])
 app.include_router(collections.router, prefix="/agents", tags=["Collections"])
+app.include_router(menu_items.router, prefix="/agents", tags=["Menu Items"])
 app.include_router(conversations.router, tags=["Conversations"])
 app.include_router(orders.router, tags=["Orders"])
 app.include_router(statistics.router, prefix="/agents", tags=["Statistics"])
