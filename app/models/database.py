@@ -1,4 +1,5 @@
 import uuid
+
 from sqlalchemy import (
     Column,
     String,
@@ -10,11 +11,12 @@ from sqlalchemy import (
     Integer,
     Float,
 )
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func
+
 from app.config.settings import settings
 
 Base = declarative_base()
@@ -62,14 +64,15 @@ class Agent(Base):
 
     # Calendar Integration
     calendar_id = Column(String, nullable=True)  # Google Calendar ID
-    business_hours = Column(JSON, nullable=True)  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
+    business_hours = Column(JSON,
+                            nullable=True)  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
     default_slot_duration = Column(Integer, default=30)  # minutes
     max_slot_appointments = Column(Integer, default=1)  # max appointments per time slot to prevent overbooking
     buffer_time = Column(Integer, default=10)  # minutes between appointments
     blocked_dates = Column(JSON, nullable=True)  # ["2024-12-25", "2024-01-01"] - dates when agent is unavailable
-    invitees = Column(JSON, nullable=True)  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
+    invitees = Column(JSON,
+                      nullable=True)  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
     booking_enabled = Column(Boolean, default=True)  # Whether calendar booking is enabled for this agent
-
 
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
@@ -179,6 +182,12 @@ class Order(Base):
     status = Column(String, nullable=False, default="new")  # e.g., new, in_progress, ready, completed
     total_price = Column(Float, nullable=True)
     active = Column(Boolean, default=True)
+    pickup_time = Column(String, nullable=True)  # scheduled pickup time
+    special_requests = Column(Text, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)  # when order was completed
+    payment_status = Column(String, default="unpaid")  # unpaid, paid, refunded
+    payment_method = Column(String, nullable=True)  # cash, card, online
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -260,12 +269,13 @@ class MenuItem(Base):
     agent = relationship("Agent", back_populates="menu_items")
 
 
-
 def get_db_session():
     return SessionLocal()
 
+
 def create_tables():
     Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = get_db_session()

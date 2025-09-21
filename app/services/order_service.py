@@ -62,7 +62,9 @@ class OrderService:
                 customer_phone=order_data.get('customer_phone'),
                 customer_name=order_data.get('customer_name'),
                 status=order_data.get('status', 'new'),
-                total_price=total_price
+                total_price=total_price,
+                pickup_time=order_data.get('pickup_time'),
+                special_requests=order_data.get('special_requests')
             )
 
             db.add(new_order)
@@ -154,7 +156,7 @@ class OrderService:
                 raise ValueError(f"Order {order_id} not found")
 
             # Update allowed fields
-            allowed_fields = ['customer_name', 'customer_phone', 'status', 'total_price']
+            allowed_fields = ['customer_name', 'customer_phone', 'status', 'total_price', 'pickup_time', 'special_requests', 'completed_at']
             for field, value in updates.items():
                 if field in allowed_fields:
                     setattr(order, field, value)

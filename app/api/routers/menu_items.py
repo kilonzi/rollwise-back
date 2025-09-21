@@ -174,7 +174,7 @@ async def get_menu_categories(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.patch("/{agent_id}/menu-items/{item_id}/toggle-availability", response_model=MenuItemResponse)
+@router.put("/{agent_id}/menu-items/{item_id}/toggle-availability", response_model=MenuItemResponse)
 async def toggle_menu_item_availability(
         agent_id: str,
         item_id: str,

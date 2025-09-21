@@ -56,7 +56,7 @@ def get_order(order_id: str, db: Session = Depends(get_db)):
     return order
 
 
-@router.patch(
+@router.put(
     "/orders/{order_id}",
     response_model=OrderSchema,
     summary="Update an existing order",
@@ -152,7 +152,7 @@ def get_agent_orders(
         raise HTTPException(status_code=400, detail=f"Failed to retrieve orders: {str(e)}")
 
 
-@router.patch(
+@router.put(
     "/orders/{order_id}/status",
     response_model=OrderSchema,
     summary="Update order status",

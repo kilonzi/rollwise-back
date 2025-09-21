@@ -11,6 +11,7 @@ from typing import Dict, Any
 from sqlalchemy import and_, desc
 from sqlalchemy.orm import Session
 
+from app.config.agent_constants import PLATFORM_TEMPLATE
 from app.models import Agent, Conversation, Order, MenuItem
 from app.tools.registry import global_registry
 from app.utils.logging_config import app_logger
@@ -81,18 +82,42 @@ class ContextBuilderService:
                 historical_order_context=historical_order_context
             )
 
-
-            # 7. Build voice configuration
-            voice_config = self._build_voice_config(agent)
-
-            # 8. Build complete agent configuration
+            # 7. Build complete agent configuration using official Deepgram Agent API format
             return {
+                "type": "Settings",
+                "audio": {
+                    "input": {
+                        "encoding": "mulaw",
+                        "sample_rate": 8000
+                    },
+                    "output": {
+                        "encoding": "mulaw",
+                        "sample_rate": 8000,
+                        "container": "none"
+                    }
+                },
                 "agent": {
-                    "speak": voice_config,
                     "language": agent.language or "en",
+                    "listen": {
+                        "provider": {
+                            "type": "deepgram",
+                            "model": "nova-3"
+                        }
+                    },
                     "think": {
+                        "provider": {
+                            "type": "open_ai",
+                            "model": "gpt-4o-mini",
+                            "temperature": 0.4
+                        },
                         "prompt": system_prompt,
-                        "functions": self._build_functions_from_registry()
+                        "functions": self._extract_functions_from_registry()
+                    },
+                    "speak": {
+                        "provider": {
+                            "type": "deepgram",
+                            "model": agent.voice_model or "aura-2-thalia-en"
+                        }
                     },
                     "greeting": self._build_greeting(agent)
                 }
@@ -186,7 +211,7 @@ class ContextBuilderService:
             for category, items in categories.items():
                 menu_text += f"\n{category.upper()}:\n"
                 for item in items:
-                    menu_text += f"• {item.name} - ${item.price:.2f}"
+                    menu_text += f"• Item Id: {item.id} - {item.name} - ${item.price:.2f}"
                     if item.number:
                         menu_text += f" (#{item.number})"
 
@@ -324,26 +349,8 @@ class ContextBuilderService:
     ) -> str:
         """Build the complete unified system prompt"""
 
-        # Fixed platform prompt for common behavior
-        platform_prompt = """You are a professional AI assistant helping customers with their inquiries. 
-
-CORE BEHAVIOR:
-- Be friendly, helpful, and professional at all times
-- Listen carefully to customer needs and respond appropriately
-- Ask clarifying questions when needed
-- Provide accurate information based on available data
-- Handle orders efficiently and accurately
-- If you don't know something, say so rather than guessing
-- Always confirm important details with customers
-
-CONVERSATION FLOW:
-- Greet customers warmly
-- Understand their needs (information, ordering, booking, etc.)
-- Provide relevant assistance using available tools and data
-- Summarize actions taken and next steps
-- End calls professionally
-
-"""
+        # Use centralized platform template for consistent tone and behavior
+        platform_prompt = PLATFORM_TEMPLATE
 
         # Agent's custom prompt (if available)
         agent_prompt = ""
@@ -420,8 +427,7 @@ CONVERSATION FLOW:
             context_parts = [
                 f"CURRENT CONVERSATION:",
                 f"- Conversation ID: {conversation.id}",
-                f"- Customer Phone: {conversation.caller_phone}",
-                f"- Status: {conversation.status}"
+                f"- The Customer Phone Number is (don't ask for it), use this one: {conversation.caller_phone}",
             ]
 
             # Find the order associated with this conversation
@@ -436,8 +442,7 @@ CONVERSATION FLOW:
                     f"",
                     f"CURRENT ORDER (ALWAYS USE THIS ORDER):",
                     f"- Order ID: {order.id}",
-                    f"- Status: {order.status}",
-                    f"- Customer: {order.customer_phone}"
+                    f"- Customer Phone Number: {order.customer_phone}"
                 ])
 
                 # Add current order items
@@ -606,27 +611,29 @@ CONVERSATION FLOW:
             app_logger.error(f"Error building order history: {str(e)}")
             return "ORDER HISTORY: Error retrieving order history"
 
-    def _build_functions_from_registry(self) -> list:
-        """Build functions array from the global tools registry for Deepgram"""
+    def _extract_functions_from_registry(self) -> list:
+        """Extract function definitions from the tools registry to avoid duplication"""
         try:
             functions = []
 
             # Get all registered tools from the global registry
             for tool_name, tool_description in global_registry.tool_descriptions.items():
-                # Convert registry format to Deepgram format
+                # Convert registry format to Deepgram Agent API format
                 function_def = {
                     "name": tool_description["name"],
                     "description": tool_description["description"] or f"Execute {tool_name} function",
                     "parameters": tool_description.get("parameters", {
                         "type": "object",
-                        "properties": {}
+                        "properties": {},
+                        "required": []
                     })
                 }
                 functions.append(function_def)
+                app_logger.info(f"[REGISTRY] Extracted function: {function_def['name']}")
 
-            app_logger.info(f"Built {len(functions)} functions from registry: {[f['name'] for f in functions]}")
+            app_logger.info(f"Extracted {len(functions)} functions from registry: {[f['name'] for f in functions]}")
             return functions
 
         except Exception as e:
-            app_logger.error(f"Error building functions from registry: {str(e)}")
+            app_logger.error(f"Error extracting functions from registry: {str(e)}")
             return []

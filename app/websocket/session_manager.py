@@ -128,6 +128,9 @@ class WebSocketSession:
                 logger.error("[SESSION] Failed to connect to Deepgram")
                 return False
 
+            # Pass TwilioHandler reference to DeepgramHandler for audio routing
+            self.deepgram_handler.twilio_handler = self.twilio_handler
+
             # Start all processing tasks
             self.tasks = [
                 asyncio.create_task(self.deepgram_handler.receive_messages(self.audio_processor)),
@@ -293,6 +296,7 @@ class DeepgramHandler:
         self.deepgram_ws = None
         self.is_connected = False
         self.connection_manager = None
+        self.twilio_handler = None  # Reference to TwilioHandler
 
         logger.info("[DEEPGRAM] Handler initialized")
 
@@ -355,6 +359,14 @@ class DeepgramHandler:
 
         except asyncio.CancelledError:
             logger.info("[DEEPGRAM] Message receiver cancelled")
+        except ConnectionClosedError as e:
+            # Check if this was an intentional hangup (close code 1000 = normal closure)
+            if e.code == 1000:
+                logger.info("[DEEPGRAM] Connection closed normally (hangup)")
+            elif e.code == 1006:
+                logger.info("[DEEPGRAM] Connection closed by hangup function - this is expected")
+            else:
+                logger.warning(f"[DEEPGRAM] Connection closed unexpectedly: {e.code} - {e.reason}")
         except Exception as e:
             logger.exception(f"[DEEPGRAM] Message receiver error: {e}")
         finally:
@@ -386,6 +398,13 @@ class DeepgramHandler:
             # This is agent speech audio - we need to send it back to Twilio
             audio_processor.agent_audio_buffer.append(message)
             logger.debug(f"[DEEPGRAM] Received {len(message)} bytes of agent audio")
+
+            # Send audio directly to Twilio via the TwilioHandler
+            if self.twilio_handler:
+                await self.twilio_handler.send_audio_to_twilio(message)
+                logger.debug(f"[DEEPGRAM] Sent {len(message)} bytes to Twilio")
+            else:
+                logger.warning("[DEEPGRAM] No TwilioHandler available for audio routing")
 
         except Exception as e:
             logger.exception(f"[DEEPGRAM] Error handling audio message: {e}")
