@@ -1,13 +1,16 @@
 from contextlib import asynccontextmanager
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import auth, users, tenants, agents, conversations, twilio
+from app.api.routers import users, agents, conversations, communication, orders, statistics, collections
 from app.config.settings import settings
 from app.models import create_tables
 from app.utils.logging_config import app_logger as logger
+
+load_dotenv(override=True)
 
 
 @asynccontextmanager
@@ -22,16 +25,7 @@ async def lifespan(fapp: FastAPI):
     create_tables()
     logger.info("✅ Database tables created/verified")
     logger.info("📋 Multi-tenant schema ready:")
-    logger.info("   - Tenants (businesses)")
-    logger.info("   - Users (tenant members)")
-    logger.info("   - Agents (AI voice agents)")
-    logger.info("   - Conversations (call/SMS sessions)")
-    logger.info("   - Messages (chronological conversation content)")
-    logger.info("   - ToolCalls (function execution logs)")
-    logger.info("   - BusinessDatasets (ChromaDB knowledge)")
-
     logger.info("🎯 Platform ready for multi-tenant agent deployment!")
-    logger.info("📡 Admin API: http://%s:%s/admin/", settings.HOST, settings.PORT)
     logger.info("📖 API Docs: http://%s:%s/docs", settings.HOST, settings.PORT)
     yield
 
@@ -53,12 +47,13 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(twilio.router, tags=["Twilio"])
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/users", tags=["Users"])
-app.include_router(tenants.router, tags=["Tenants"])
-app.include_router(agents.router, tags=["Agents"])
+app.include_router(communication.router, tags=["Twilio"])
+app.include_router(users.router, prefix="/auth", tags=["Auth"])
+app.include_router(agents.router, prefix="/agents", tags=["Agents"])
+app.include_router(collections.router, prefix="/agents", tags=["Collections"])
 app.include_router(conversations.router, tags=["Conversations"])
+app.include_router(orders.router, tags=["Orders"])
+app.include_router(statistics.router, prefix="/agents", tags=["Statistics"])
 
 
 # Health check endpoint

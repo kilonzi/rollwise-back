@@ -1,7 +1,7 @@
 from typing import Dict
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
-from app.models import Agent, Tenant, Conversation
+from app.models import Agent, Conversation
 from app.services.conversation_service import ConversationService
 
 
@@ -27,7 +27,7 @@ def validate_agent_and_phone(
     agent_id: str, 
     to_number: str, 
     db: Session
-) -> Agent:
+) -> type[Agent]:
     """
     Validate agent exists, is active, and phone number matches.
     
@@ -45,8 +45,7 @@ def validate_agent_and_phone(
     # Get agent from database with active tenant check
     agent = (
         db.query(Agent)
-        .join(Tenant)
-        .filter(Agent.id == agent_id, Agent.active, Tenant.active)
+        .filter(Agent.id == agent_id, Agent.active)
         .first()
     )
     
@@ -93,7 +92,6 @@ def create_twilio_conversation(
     
     conversation = conversation_service.create_conversation(
         agent_id=agent_id,
-        tenant_id=str(agent.tenant_id),
         caller_phone=from_number,
         conversation_type=conversation_type,
         twilio_sid=call_sid,

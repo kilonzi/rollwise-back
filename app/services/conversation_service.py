@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-import google.generativeai as genai
-import os
 
-from app.models import Conversation, Message, Agent, Tenant
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models import Conversation, Message, Agent
 from app.utils.logging_config import app_logger as logger
+from app.utils.vertex_ai_client import get_vertex_ai_client
 
 
 class ConversationService:
@@ -14,26 +14,21 @@ class ConversationService:
 
     def __init__(self, db: Session):
         self.db = db
-        # Initialize Google Gemini AI
-        if os.getenv("GOOGLE_AI_API_KEY"):
-            genai.configure(api_key=os.getenv("GOOGLE_AI_API_KEY"))
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
-        else:
-            self.model = None
+        # Initialize Vertex AI client
+        vertex_client = get_vertex_ai_client()
+        self.model = vertex_client.get_model()
 
     def create_conversation(
-        self,
-        agent_id: str,
-        tenant_id: str,
-        caller_phone: str,
-        conversation_type: str,
-        session_name: str,
-        twilio_sid: Optional[str] = None,
+            self,
+            agent_id: str,
+            caller_phone: str,
+            conversation_type: str,
+            session_name: str,
+            twilio_sid: Optional[str] = None,
     ) -> Conversation:
-        """Create a new conversation"""
+        """Create a new conversation and automatically create a preemptive order"""
         conversation = Conversation(
             agent_id=agent_id,
-            tenant_id=tenant_id,
             caller_phone=caller_phone,
             conversation_type=conversation_type,
             session_name=session_name,
@@ -43,7 +38,37 @@ class ConversationService:
         self.db.add(conversation)
         self.db.commit()
         self.db.refresh(conversation)
+
+        # Automatically create a preemptive order for this conversation
+        self._create_preemptive_order(conversation)
+
         return conversation
+
+    def _create_preemptive_order(self, conversation: Conversation) -> None:
+        """Create a preemptive order when a conversation starts"""
+        try:
+            from app.models import Order
+            preemptive_order = Order(
+                agent_id=conversation.agent_id,
+                conversation_id=conversation.id,
+                customer_phone=conversation.caller_phone,
+                customer_name="",
+                status="new",
+                total_price=0.0,
+                active=False
+            )
+            self.db.add(preemptive_order)
+            self.db.commit()
+
+            logger.info(f"Created preemptive order for conversation {conversation.id}")
+
+        except Exception as e:
+            # Don't fail the conversation creation if order creation fails
+            logger.error(f"Failed to create preemptive order for conversation {conversation.id}: {str(e)}")
+            # Rollback any partial order creation, but keep the conversation
+            self.db.rollback()
+            # Re-commit the conversation
+            self.db.commit()
 
     def end_conversation(self, conversation_id: str) -> bool:
         """End a conversation and calculate duration"""
@@ -63,15 +88,16 @@ class ConversationService:
         return self.db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.active).first()
 
     def add_message(
-        self,
-        conversation_id: str,
-        role: str,
-        content: str,
-        audio_file_path: Optional[str] = None,
-        message_type: str = "conversation"
+            self,
+            conversation_id: str,
+            role: str,
+            content: str,
+            audio_file_path: Optional[str] = None,
+            message_type: str = "conversation"
     ) -> Message:
         """Add a new message to a conversation."""
-        max_seq = self.db.query(func.max(Message.sequence_number)).filter(Message.conversation_id == conversation_id).scalar() or 0
+        max_seq = self.db.query(func.max(Message.sequence_number)).filter(
+            Message.conversation_id == conversation_id).scalar() or 0
         message = Message(
             conversation_id=conversation_id,
             role=role,
@@ -88,7 +114,8 @@ class ConversationService:
 
     def get_conversation_messages(self, conversation_id: str) -> List[Message]:
         """Get all messages for a conversation."""
-        return self.db.query(Message).filter(Message.conversation_id == conversation_id, Message.active).order_by(Message.sequence_number).all()
+        return self.db.query(Message).filter(Message.conversation_id == conversation_id, Message.active).order_by(
+            Message.sequence_number).all()
 
     def update_message_audio(self, message_id: str, audio_file_path: str) -> Optional[Message]:
         """Update a message with the path to its audio file."""
@@ -102,7 +129,7 @@ class ConversationService:
     async def summarize_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         """Generate a comprehensive summary of the conversation."""
         if not self.model:
-            logger.warning("Summarization service not available. GOOGLE_AI_API_KEY not set.")
+            logger.warning("Summarization service not available. Vertex AI client not initialized.")
             return None
 
         messages = self.get_messages_for_summary(conversation_id)
@@ -129,12 +156,14 @@ class ConversationService:
             return summary_data
         except Exception as e:
             logger.exception("Error generating summary for conversation %s: %s", conversation_id, str(e))
-            return {"conversation_id": conversation_id, "summary": "Summary generation failed", "error": str(e), "message_count": len(messages)}
+            return {"conversation_id": conversation_id, "summary": "Summary generation failed", "error": str(e),
+                    "message_count": len(messages)}
 
     def get_messages_for_summary(self, conversation_id: str) -> List[dict]:
         """Get messages formatted for LLM summarization"""
         messages = self.get_conversation_messages(conversation_id)
-        return [{"role": msg.role, "content": msg.content, "timestamp": msg.created_at.isoformat(), "sequence": msg.sequence_number} for msg in messages if msg.message_type == "conversation"]
+        return [{"role": msg.role, "content": msg.content, "timestamp": msg.created_at.isoformat(),
+                 "sequence": msg.sequence_number} for msg in messages if msg.message_type == "conversation"]
 
     def _format_messages_for_llm(self, messages: List[Dict]) -> str:
         """Format messages for LLM processing"""
@@ -173,7 +202,8 @@ Keep the summary professional, detailed, and focused on business-relevant inform
     def _extract_key_topics(self, messages: List[Dict]) -> List[str]:
         """Extract key topics mentioned in the conversation"""
         keywords = set()
-        common_business_terms = ["appointment", "booking", "price", "cost", "hours", "schedule", "service", "client", "customer", "inventory", "product", "meeting"]
+        common_business_terms = ["appointment", "booking", "price", "cost", "hours", "schedule", "service", "client",
+                                 "customer", "inventory", "product", "meeting"]
         for msg in messages:
             content_lower = msg["content"].lower()
             for term in common_business_terms:
@@ -233,37 +263,17 @@ Keep the summary professional, detailed, and focused on business-relevant inform
             self.db.rollback()
             return False
 
-    def get_tenant_conversations(
-        self, tenant_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Conversation]:
-        """Get conversations for a tenant (only active conversations and tenants)"""
-        return (
-            self.db.query(Conversation)
-            .join(Tenant)
-            .filter(
-                Conversation.tenant_id == tenant_id,
-                Conversation.active,
-                Tenant.active,
-            )
-            .order_by(Conversation.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-            .all()
-        )
-
     def get_agent_conversations(
-        self, agent_id: str, limit: int = 50, offset: int = 0
+            self, agent_id: str, limit: int = 50, offset: int = 0
     ) -> List[Conversation]:
-        """Get conversations for an agent (only active conversations, agents, and tenants)"""
+        """Get conversations for an agent"""
         return (
             self.db.query(Conversation)
             .join(Agent)
-            .join(Tenant)
             .filter(
                 Conversation.agent_id == agent_id,
                 Conversation.active,
                 Agent.active,
-                Tenant.active,
             )
             .order_by(Conversation.created_at.desc())
             .limit(limit)
@@ -272,18 +282,16 @@ Keep the summary professional, detailed, and focused on business-relevant inform
         )
 
     def get_caller_conversations(
-        self, caller_phone: str, agent_id: str = None, limit: int = 10
+            self, caller_phone: str, agent_id: str = None, limit: int = 10
     ) -> List[Conversation]:
-        """Get conversation history for a specific caller (only active conversations, agents, and tenants)"""
+        """Get conversation history for a specific caller"""
         query = (
             self.db.query(Conversation)
             .join(Agent)
-            .join(Tenant)
             .filter(
                 Conversation.caller_phone == caller_phone,
                 Conversation.active,
                 Agent.active,
-                Tenant.active,
             )
         )
 

@@ -1,41 +1,33 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 
-class UserRegistration(BaseModel):
-    name: str
+class UserUpsertRequest(BaseModel):
     email: EmailStr
-    password: str
+    firebase_uid: str
+    email_verified: bool
+    name: Optional[str] = None
     phone_number: Optional[str] = None
-    tenant_id: Optional[str] = None
-    role: str = "user"
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-
-class PasswordReset(BaseModel):
-    reset_token: str
-    new_password: str
+    photo_url: Optional[str] = None
+    provider: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class UserResponse(BaseModel):
     id: str
-    name: str
-    email: str
-    phone_number: Optional[str]
+    email: EmailStr
+    firebase_uid: str
+    email_verified: bool
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    photo_url: Optional[str] = None
+    provider: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
     global_role: str
     active: bool
     created_at: datetime
-    last_login: Optional[datetime]
+    updated_at: datetime
 
     class Config:
-        orm_mode = True
-
+        from_attributes = True

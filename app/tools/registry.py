@@ -2,13 +2,6 @@ import inspect
 from typing import Dict, Callable, Any, List
 
 from app.models.database import get_db, ToolCall
-from app.tools.calendar_tools import (
-    create_calendar_event_function,
-    cancel_calendar_event_function,
-    search_calendar_events_function,
-    update_calendar_event_function,
-    list_calendar_events_function
-)
 from app.utils.logging_config import app_logger as logger
 
 
@@ -18,7 +11,7 @@ class ToolRegistry:
         self.tool_descriptions: Dict[str, Dict[str, Any]] = {}
 
     def register(
-        self, name: str, description: str = "", parameters: Dict[str, Any] = None
+            self, name: str, description: str = "", parameters: Dict[str, Any] = None
     ):
         def decorator(func: Callable):
             self.tools[name] = func
@@ -58,7 +51,7 @@ class ToolRegistry:
         return {"type": "object", "properties": parameters}
 
     async def execute_tool(
-        self, name: str, args: Dict[str, Any], conversation_id: str
+            self, name: str, args: Dict[str, Any], conversation_id: str
     ) -> Dict[str, Any]:
         """Execute a tool and log the action"""
         if name not in self.tools:
@@ -82,12 +75,12 @@ class ToolRegistry:
             return error_result
 
     def _log_action(
-        self,
-        conversation_id: str,
-        tool_name: str,
-        args: Dict[str, Any],
-        result: Dict[str, Any],
-        status: str,
+            self,
+            conversation_id: str,
+            tool_name: str,
+            args: Dict[str, Any],
+            result: Dict[str, Any],
+            status: str,
     ):
         """Log tool execution to database"""
         db = None
@@ -133,21 +126,9 @@ def tool(name: str, description: str = "", parameters: Dict[str, Any] = None):
 # Global registry instance
 global_registry = ToolRegistry()
 
-# Calendar tool definitions
-CALENDAR_TOOLS = {
-    "create_calendar_event": create_calendar_event_function(),
-    "cancel_calendar_event": cancel_calendar_event_function(),
-    "search_calendar_events": search_calendar_events_function(),
-    "update_calendar_event": update_calendar_event_function(),
-    "list_calendar_events": list_calendar_events_function()
-}
-
-def get_calendar_tool_definitions() -> List[Dict[str, Any]]:
-    """Get all calendar tool definitions"""
-    return list(CALENDAR_TOOLS.values())
-
-def get_tool_definition(tool_name: str) -> Dict[str, Any]:
-    """Get definition for a specific tool"""
-    if tool_name in CALENDAR_TOOLS:
-        return CALENDAR_TOOLS[tool_name]
-    return global_registry.tool_descriptions.get(tool_name, {})
+# Auto-import and register order tools
+try:
+    from app.tools import order_tools
+    logger.info("Order tools loaded and registered successfully")
+except ImportError as e:
+    logger.warning(f"Failed to load order tools: {e}")

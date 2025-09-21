@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    ELEVEN_LABS_API_KEY: str = os.getenv("ELEVEN_LABS_API_KEY", "")
 
     # Google Calendar Integration
     GOOGLE_CALENDAR_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_PATH", "./credentials.json")
@@ -40,7 +41,12 @@ class Settings(BaseSettings):
     VOICE: str = os.getenv("VOICE", "aura-2-thalia-en")
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./calls.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/rollwise")
+
+    # ChromaDB Cloud
+    CHROMA_API_KEY: str = os.getenv("CHROMA_API_KEY", "")
+    CHROMA_TENANT: str = os.getenv("CHROMA_TENANT", "")
+    CHROMA_DATABASE: str = os.getenv("CHROMA_DATABASE", "")
 
     # Audio Processing
     BUFFER_SIZE: int = int(os.getenv("BUFFER_SIZE", str(20 * 160)))  # 20ms @ 8kHz μ-law

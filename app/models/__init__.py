@@ -1,33 +1,29 @@
 from .database import (
     Base,
-    Tenant,
     User,
-    UserTenant,
     Agent,
     Conversation,
     Message,
     ToolCall,
     Board,
-    BoardItem,
+    Order,
+    OrderItem,
     Collection,
     get_db,
-    get_db_session,
-    create_tables,
+    create_tables
 )
 
 __all__ = [
     "Base",
-    "Tenant",
     "User",
-    "UserTenant",
     "Agent",
     "Conversation",
     "Message",
     "ToolCall",
     "Board",
-    "BoardItem",
     "Collection",
+    "Order",
+    "OrderItem",
     "get_db",
-    "get_db_session",
-    "create_tables",
+    "create_tables"
 ]

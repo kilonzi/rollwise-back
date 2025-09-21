@@ -1,3 +1,5 @@
+from typing import Dict, Any
+
 VOICE = "aura-2-thalia-en"
 
 # this gets updated by the agent template

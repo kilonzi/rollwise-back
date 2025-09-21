@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 from typing import Dict, Any
 
@@ -16,52 +15,19 @@ class AgentConfigBuilder:
     @staticmethod
     def build_voice_settings(agent: Agent) -> Dict[str, Any]:
         """
-        Build voice provider settings with ElevenLabs primary and Deepgram fallback
+        Build voice provider settings based on agent configuration
 
         Args:
             agent: Agent database object with voice configuration
 
         Returns:
-            Voice settings dictionary for the agent configuration
+            Voice settings dictionary for the configured provider
         """
-        # Get environment variables
-        eleven_labs_api_key = os.getenv("ELEVEN_LABS_API_KEY")
-        eleven_labs_model = os.getenv("ELEVEN_LABS_MODEL", "eleven_turbo_v2_5")
-
-        # Default to Deepgram if no ElevenLabs configuration
-        if (not agent.eleven_labs_voice_id or
-            not eleven_labs_api_key or
-            agent.voice_provider == "deepgram"):
-
-            # Deepgram fallback configuration
-            return {
-                "provider": {
-                    "type": "deepgram",
-                    "model": agent.voice_model or "aura-2-thalia-en",
-                }
-            }
-
-        # ElevenLabs primary configuration
-        if agent.voice_provider == "eleven_labs" and agent.eleven_labs_voice_id:
-            return {
-                "provider": {
-                    "type": "eleven_labs",
-                    "model_id": eleven_labs_model,
-                    "language_code": "en-US"
-                },
-                "endpoint": {
-                    "url": f"wss://api.elevenlabs.io/v1/text-to-speech/{agent.eleven_labs_voice_id}/stream-input",
-                    "headers": {
-                        "xi-api-key": eleven_labs_api_key
-                    }
-                }
-            }
-
-        # Default fallback to Deepgram
+        voice_model = agent.voice_model or "aura-2-thalia-en"
         return {
             "provider": {
                 "type": "deepgram",
-                "model": agent.voice_model or "aura-2-thalia-en",
+                "model": voice_model
             }
         }
 
@@ -76,7 +42,7 @@ class AgentConfigBuilder:
             return "Assistant"
         except Exception:
             return "Assistant"
-    
+
     @staticmethod
     def build_personality_prompt(agent: Agent, voice_name: str) -> str:
         """Build personality section from agent data with reasonable defaults"""
@@ -99,7 +65,7 @@ class AgentConfigBuilder:
                 personality = f"You are {agent.name}, a friendly and professional representative for {company_name}. Your role is to assist customers with their inquiries, provide information about services, and help with general business questions."
 
         return personality
-    
+
     @staticmethod
     def build_greeting_message(agent: Agent, voice_name: str) -> str:
         """Build greeting message from agent data with reasonable defaults"""
@@ -122,8 +88,9 @@ class AgentConfigBuilder:
 
         # Business hours
         if agent.business_hours:
-            days_map = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday"}
-            business_days = [days_map.get(day, str(day)) for day in agent.business_hours.get("days", [1,2,3,4,5])]
+            days_map = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday",
+                        7: "Sunday"}
+            business_days = [days_map.get(day, str(day)) for day in agent.business_hours.get("days", [1, 2, 3, 4, 5])]
             start_time = agent.business_hours.get("start", "09:00")
             end_time = agent.business_hours.get("end", "17:00")
             timezone = agent.business_hours.get("timezone", "UTC")
@@ -157,8 +124,7 @@ class AgentConfigBuilder:
         calendar_info += "\n\nWhen customers request appointments, use the calendar tools to check availability and create bookings within business hours only."
 
         return calendar_info
-    
-    
+
     @staticmethod
     def build_agent_config(agent: Agent, customer_context: str = "", collection_details: str = "") -> Dict[str, Any]:
         """
@@ -176,10 +142,10 @@ class AgentConfigBuilder:
         voice_model = agent.voice_model or "aura-2-thalia-en"
         voice_name = AgentConfigBuilder.get_voice_name_from_model(voice_model)
         language = agent.language or "en"
-        
+
         # Build greeting from agent data
         greeting = AgentConfigBuilder.build_greeting_message(agent, voice_name)
-        
+
         # Format the general prompt template with current date
         formatted_general_prompt = PROMPT_TEMPLATE.format(
             current_date=datetime.now().strftime("%A, %B %d, %Y")
@@ -218,26 +184,26 @@ class AgentConfigBuilder:
                 default_identity = f"You are {voice_name}, a friendly and professional representative for {company_name}. Your role is to assist customers with their inquiries, provide information about services, and help with general business questions."
 
             full_prompt = default_identity + "\n\n" + formatted_general_prompt + calendar_info + customer_context_section + collection_section
-        
+
         # Create settings based on agent configuration
         agent_settings = SETTINGS.copy()
 
-        # Update voice settings with ElevenLabs or Deepgram
+        # Update voice settings with ElevenLabs
         agent_settings["agent"]["speak"] = AgentConfigBuilder.build_voice_settings(agent)
-        
+
         # Update language
         agent_settings["agent"]["language"] = language
-        
+
         # Update prompt with combined content
         agent_settings["agent"]["think"]["prompt"] = full_prompt
-        
+
         # Update greeting
         agent_settings["agent"]["greeting"] = greeting
-        
+
         # Add function definitions (tools will be filtered based on agent.tools if needed)
         agent_settings["agent"]["think"]["functions"] = FUNCTION_DEFINITIONS
         return agent_settings
-    
+
     @staticmethod
     def get_reasonable_defaults() -> Dict[str, Any]:
         """Get reasonable default values for missing agent data"""

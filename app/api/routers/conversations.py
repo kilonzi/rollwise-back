@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
 import os
+from typing import List
 
-from app.models import get_db, Conversation, Message, UserTenant, Agent
-from app.services.conversation_service import ConversationService
-from app.services.audio_service import AudioService
-from app.api.schemas.conversation_schemas import ConversationResponse, MessageResponse
-from app.api.dependencies import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from app.api.dependencies import get_current_user
+from app.api.schemas.conversation_schemas import ConversationResponse, MessageResponse
+from app.models import get_db, Conversation, Message, Agent
+from app.services.audio_service import AudioService
+from app.services.conversation_service import ConversationService
 
 router = APIRouter()
 
@@ -16,7 +17,6 @@ router = APIRouter()
 def _serialize_conversation(conv: Conversation) -> dict:
     return {
         "id": conv.id,
-        "tenant_id": conv.tenant_id,
         "agent_id": conv.agent_id,
         "session_name": conv.session_name,
         "conversation_type": conv.conversation_type,
@@ -46,49 +46,18 @@ def _serialize_message(msg: Message) -> dict:
     }
 
 
-@router.get("/tenants/{tenant_id}/conversations", response_model=List[ConversationResponse])
-async def get_tenant_conversations(
-    tenant_id: str,
-    limit: int = 50,
-    offset: int = 0,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """List conversations for a tenant that the current user has access to."""
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == tenant_id,
-        UserTenant.active
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    service = ConversationService(db)
-    conversations = service.get_tenant_conversations(tenant_id, limit=limit, offset=offset)
-    return conversations
-
-
 @router.get("/agents/{agent_id}/conversations", response_model=List[ConversationResponse])
 async def get_agent_conversations(
-    agent_id: str,
-    limit: int = 50,
-    offset: int = 0,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        agent_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        current_user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """List conversations for a specific agent, ensuring user has access to the agent's tenant."""
     agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active).first()
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
-
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == agent.tenant_id,
-        UserTenant.active
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
     service = ConversationService(db)
     conversations = service.get_agent_conversations(agent_id, limit=limit, offset=offset)
     return conversations
@@ -96,23 +65,14 @@ async def get_agent_conversations(
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_conversation_messages(
-    conversation_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        conversation_id: str,
+        current_user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """Get messages for a conversation, including audio_file_path when available."""
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.active).first()
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == conversation.tenant_id,
-        UserTenant.active
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
     conv_service = ConversationService(db)
     messages = conv_service.get_conversation_messages(conversation_id)
     return messages
@@ -120,28 +80,20 @@ async def get_conversation_messages(
 
 @router.get("/messages/{message_id}/audio")
 async def get_message_audio(
-    message_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+        message_id: str,
+        current_user: dict = Depends(get_current_user),
+        db: Session = Depends(get_db)
 ):
     """Fetch and stream the audio file for a specific message."""
     message = db.query(Message).filter(Message.id == message_id, Message.active).first()
     if not message:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
 
-    conversation = db.query(Conversation).filter(Conversation.id == message.conversation_id, Conversation.active).first()
+    conversation = db.query(Conversation).filter(Conversation.id == message.conversation_id,
+                                                 Conversation.active).first()
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    user_tenant = db.query(UserTenant).filter(
-        UserTenant.user_id == current_user["id"],
-        UserTenant.tenant_id == conversation.tenant_id,
-        UserTenant.active
-    ).first()
-    if not user_tenant and current_user["global_role"].lower() != "platform_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this tenant")
-
-    # Determine file path: prefer stored path; else rebuild predictable path and update message
     audio_path = message.audio_file_path
     if not audio_path:
         # Use predictable path: store/audio/{conversation_id}/{message_id}.wav

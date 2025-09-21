@@ -5,7 +5,6 @@ from datetime import datetime
 
 class ConversationResponse(BaseModel):
     id: str
-    tenant_id: str
     agent_id: str
     session_name: str
     conversation_type: str
@@ -20,7 +19,7 @@ class ConversationResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MessageResponse(BaseModel):
@@ -35,4 +34,4 @@ class MessageResponse(BaseModel):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True

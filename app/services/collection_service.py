@@ -9,10 +9,12 @@ import os
 import re
 import uuid
 from typing import Dict, Any, Optional, List
-from sqlalchemy.orm import Session
 
-from app.models import Collection
-from app.utils.chroma_utils import get_chroma_client
+from sqlalchemy.orm import Session
+import chromadb
+
+from app.models import Collection, Agent
+from app.config.settings import settings
 from app.utils.logging_config import app_logger as logger
 
 
@@ -34,9 +36,21 @@ class CollectionService:
 
     @property
     def chroma_client(self):
-        """Lazy initialization of ChromaDB client"""
+        """Lazy initialization of ChromaDB client, configured for ChromaDB Cloud."""
         if self._chroma_client is None:
-            self._chroma_client = chromadb.PersistentClient(path="store/chroma")
+            if settings.CHROMA_API_KEY and settings.CHROMA_TENANT and settings.CHROMA_DATABASE:
+                logger.info("Connecting to ChromaDB Cloud...")
+                self._chroma_client = chromadb.CloudClient(
+                    api_key=settings.CHROMA_API_KEY,
+                    tenant=settings.CHROMA_TENANT,
+                    database=settings.CHROMA_DATABASE
+                )
+                logger.info("Successfully connected to ChromaDB Cloud.")
+            else:
+                logger.warning("ChromaDB Cloud settings not found, falling back to local ChromaDB.")
+                chroma_path = os.path.join("store", "chroma")
+                os.makedirs(chroma_path, exist_ok=True)
+                self._chroma_client = chromadb.PersistentClient(path=chroma_path)
         return self._chroma_client
 
     def slugify_name(self, name: str) -> str:
@@ -51,8 +65,93 @@ class CollectionService:
             slug = "collection"
         return slug
 
+    def chunk_text(
+        self,
+        text: str,
+        chunk_size: int = 1000,
+        overlap: int = 200
+    ) -> List[Dict[str, Any]]:
+        """
+        Chunk text using sliding window approach with overlap.
+
+        Args:
+            text: The text to chunk
+            chunk_size: Maximum size of each chunk in characters
+            overlap: Number of characters to overlap between chunks
+
+        Returns:
+            List of chunks with metadata
+        """
+        chunks = []
+        start = 0
+        idx = 0
+
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            chunk = text[start:end]
+            chunks.append({
+                "chunk_index": idx,
+                "text": chunk,
+                "char_count": len(chunk),
+                "start_char": start,
+                "end_char": end,
+                "word_count": len(chunk.split())
+            })
+            start += chunk_size - overlap
+            idx += 1
+
+        return chunks
+
+    def chunk_csv_content(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Process CSV file where each row becomes a separate document/chunk.
+
+        Args:
+            file_path: Path to the CSV file
+
+        Returns:
+            List of chunks, one per CSV row
+        """
+        try:
+            import csv
+            chunks = []
+
+            with open(file_path, 'r', encoding='utf-8') as file:
+                # Try to detect dialect
+                sample = file.read(1024)
+                file.seek(0)
+                sniffer = csv.Sniffer()
+                dialect = sniffer.sniff(sample)
+
+                reader = csv.DictReader(file, dialect=dialect)
+                headers = reader.fieldnames
+
+                for idx, row in enumerate(reader):
+                    # Convert row to natural language
+                    row_parts = []
+                    for key, value in row.items():
+                        if value and value.strip():
+                            row_parts.append(f"{key}: {value}")
+
+                    if row_parts:
+                        row_text = ", ".join(row_parts)
+                        chunks.append({
+                            "chunk_index": idx,
+                            "text": row_text,
+                            "char_count": len(row_text),
+                            "word_count": len(row_text.split()),
+                            "row_number": idx + 1,
+                            "headers": headers,
+                            "raw_data": dict(row)
+                        })
+
+            return chunks
+
+        except Exception as e:
+            raise Exception(f"Error processing CSV: {str(e)}")
+
     def detect_content_type(self, text: str, filename: str = "") -> str:
-        """Auto-detect content type based on text analysis"""
+        """Auto-detect content type based on text analysis - simplified version"""
         text_lower = text.lower()
 
         # Check for menu indicators
@@ -93,217 +192,6 @@ class CollectionService:
                 return "faq"
 
         return "general"
-
-    def chunk_text(self, text: str, content_type: str = "general") -> List[Dict[str, Any]]:
-        """
-        Intelligently chunk text based on content type.
-
-        Returns list of chunks with metadata.
-        """
-        chunks = []
-
-        # Clean text
-        text = text.strip()
-        if not text:
-            return chunks
-
-        # Different chunking strategies based on content type
-        if content_type == "menu":
-            chunks = self._chunk_menu_content(text)
-        elif content_type == "policy":
-            chunks = self._chunk_policy_content(text)
-        elif content_type == "faq":
-            chunks = self._chunk_faq_content(text)
-        else:
-            chunks = self._chunk_general_content(text)
-
-        # Add metadata to chunks
-        for i, chunk in enumerate(chunks):
-            chunk.update({
-                "chunk_index": i,
-                "content_type": content_type,
-                "chunk_id": f"chunk_{i}",
-                "word_count": len(chunk["text"].split())
-            })
-
-        return chunks
-
-    def _chunk_menu_content(self, text: str) -> List[Dict[str, Any]]:
-        """Chunk menu content by categories and items"""
-        chunks = []
-
-        # Try to split by sections (appetizers, entrees, etc.)
-        section_patterns = [
-            r'(?i)(appetizers?|starters?)',
-            r'(?i)(entrees?|main courses?|mains?)',
-            r'(?i)(desserts?|sweets?)',
-            r'(?i)(beverages?|drinks?)',
-            r'(?i)(specials?|daily specials?)',
-            r'(?i)(lunch|dinner|breakfast)',
-        ]
-
-        current_section = "General"
-        current_content = []
-
-        lines = text.split('\n')
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Check if this line is a section header
-            is_section = False
-            for pattern in section_patterns:
-                if re.search(pattern, line):
-                    # Save previous section
-                    if current_content:
-                        chunks.append({
-                            "text": "\n".join(current_content),
-                            "section": current_section,
-                            "source_section": current_section
-                        })
-                    current_section = line
-                    current_content = [line]
-                    is_section = True
-                    break
-
-            if not is_section:
-                current_content.append(line)
-
-            # If content gets too long, create chunk
-            if len(current_content) > 20:  # ~20 lines
-                chunks.append({
-                    "text": "\n".join(current_content),
-                    "section": current_section,
-                    "source_section": current_section
-                })
-                current_content = []
-
-        # Add remaining content
-        if current_content:
-            chunks.append({
-                "text": "\n".join(current_content),
-                "section": current_section,
-                "source_section": current_section
-            })
-
-        return chunks
-
-    def _chunk_policy_content(self, text: str) -> List[Dict[str, Any]]:
-        """Chunk policy content by sections and paragraphs"""
-        chunks = []
-
-        # Split by numbered sections or headers
-        sections = re.split(r'\n(?=\d+\.|\w+:|\n[A-Z][A-Z\s]+\n)', text)
-
-        for section in sections:
-            section = section.strip()
-            if not section:
-                continue
-
-            # If section is too long, split by paragraphs
-            if len(section) > 1000:
-                paragraphs = section.split('\n\n')
-                current_chunk = []
-                current_length = 0
-
-                for para in paragraphs:
-                    para = para.strip()
-                    if not para:
-                        continue
-
-                    if current_length + len(para) > 800:  # Max chunk size
-                        if current_chunk:
-                            chunks.append({
-                                "text": "\n\n".join(current_chunk),
-                                "section": "Policy Section",
-                                "source_section": "Policy"
-                            })
-                        current_chunk = [para]
-                        current_length = len(para)
-                    else:
-                        current_chunk.append(para)
-                        current_length += len(para)
-
-                if current_chunk:
-                    chunks.append({
-                        "text": "\n\n".join(current_chunk),
-                        "section": "Policy Section",
-                        "source_section": "Policy"
-                    })
-            else:
-                chunks.append({
-                    "text": section,
-                    "section": "Policy Section",
-                    "source_section": "Policy"
-                })
-
-        return chunks
-
-    def _chunk_faq_content(self, text: str) -> List[Dict[str, Any]]:
-        """Chunk FAQ content by Q&A pairs"""
-        chunks = []
-
-        # Try to identify Q&A patterns
-        qa_pattern = r'(?i)(?:^|\n)(?:q:|question:|q\d+:?)\s*(.*?)(?=(?:\n(?:a:|answer:|a\d+:?))|$)'
-        a_pattern = r'(?i)(?:^|\n)(?:a:|answer:|a\d+:?)\s*(.*?)(?=(?:\n(?:q:|question:|q\d+:?))|$)'
-
-        questions = re.findall(qa_pattern, text, re.DOTALL)
-        answers = re.findall(a_pattern, text, re.DOTALL)
-
-        # Pair questions and answers
-        for i, (q, a) in enumerate(zip(questions, answers)):
-            chunk_text = f"Q: {q.strip()}\nA: {a.strip()}"
-            chunks.append({
-                "text": chunk_text,
-                "section": f"FAQ Item {i+1}",
-                "source_section": "FAQ",
-                "question": q.strip(),
-                "answer": a.strip()
-            })
-
-        # If no Q&A pattern found, use general chunking
-        if not chunks:
-            return self._chunk_general_content(text)
-
-        return chunks
-
-    def _chunk_general_content(self, text: str) -> List[Dict[str, Any]]:
-        """Chunk general content by paragraphs and sentences"""
-        chunks = []
-
-        # Split by paragraphs first
-        paragraphs = text.split('\n\n')
-        current_chunk = []
-        current_length = 0
-
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                continue
-
-            # If adding this paragraph would exceed limit, save current chunk
-            if current_length + len(para) > 500 and current_chunk:
-                chunks.append({
-                    "text": "\n\n".join(current_chunk),
-                    "section": "Content",
-                    "source_section": "General"
-                })
-                current_chunk = [para]
-                current_length = len(para)
-            else:
-                current_chunk.append(para)
-                current_length += len(para)
-
-        # Add remaining content
-        if current_chunk:
-            chunks.append({
-                "text": "\n\n".join(current_chunk),
-                "section": "Content",
-                "source_section": "General"
-            })
-
-        return chunks
 
     def process_pdf_file(self, file_path: str) -> str:
         """Extract text from PDF file"""
@@ -478,31 +366,40 @@ class CollectionService:
     ):
         """Process and store collection content in ChromaDB"""
         try:
-            # Extract text content
-            if file_path and os.path.exists(file_path):
-                if collection.file_type == "pdf":
-                    content = self.process_pdf_file(file_path)
-                elif collection.file_type == "csv":
-                    content = self.process_csv_file(file_path)
-                else:  # txt or other
-                    content = self.process_text_file(file_path)
-            elif text_content:
-                content = text_content.strip()
+            # Handle CSV files differently - chunk directly from file
+            if collection.file_type == "csv" and file_path and os.path.exists(file_path):
+                chunks = self.chunk_csv_content(file_path)
+                # For CSV, we don't need to extract text content first
+                content = None
             else:
-                raise Exception("No content provided")
+                # Extract text content for PDF and text files
+                if file_path and os.path.exists(file_path):
+                    if collection.file_type == "pdf":
+                        content = self.process_pdf_file(file_path)
+                    else:  # txt or other text files
+                        content = self.process_text_file(file_path)
+                elif text_content:
+                    content = text_content.strip()
+                else:
+                    raise Exception("No content provided")
 
-            if not content:
-                raise Exception("No content extracted from source")
+                if not content:
+                    raise Exception("No content extracted from source")
+
+                # Chunk the text content
+                chunks = self.chunk_text(content)
+
+            if not chunks:
+                raise Exception("No chunks generated from content")
 
             # Detect content type
             filename = os.path.basename(file_path) if file_path else ""
-            content_type = self.detect_content_type(content, filename)
+            if content:
+                content_type = self.detect_content_type(content, filename)
+            else:
+                # For CSV files, set content type based on filename or default
+                content_type = self.detect_content_type("", filename) if filename else "data"
             collection.content_type = content_type
-
-            # Chunk content
-            chunks = self.chunk_text(content, content_type)
-            if not chunks:
-                raise Exception("No chunks generated from content")
 
             # Create ChromaDB collection
             chroma_collection = self.chroma_client.get_or_create_collection(
@@ -515,17 +412,20 @@ class CollectionService:
             ids = []
 
             for chunk in chunks:
-                doc_id = f"{collection.id}_{chunk['chunk_id']}"
+                doc_id = f"{collection.id}_chunk_{chunk['chunk_index']}"
 
                 documents.append(chunk["text"])
                 metadatas.append({
                     "collection_id": collection.id,
                     "agent_id": collection.agent_id,
                     "chunk_index": chunk["chunk_index"],
-                    "content_type": chunk["content_type"],
-                    "source_section": chunk.get("source_section", ""),
-                    "section": chunk.get("section", ""),
-                    "word_count": chunk["word_count"]
+                    "content_type": content_type,
+                    "char_count": chunk.get("char_count", 0),
+                    "word_count": chunk.get("word_count", 0),
+                    "file_type": collection.file_type,
+                    # Add CSV-specific metadata if available
+                    "row_number": chunk.get("row_number"),
+                    "headers": str(chunk.get("headers", [])) if chunk.get("headers") else None
                 })
                 ids.append(doc_id)
 
@@ -682,6 +582,17 @@ class CollectionService:
             self.db_session.rollback()
             logger.exception("Error deleting collection: %s", e)
             return False
+
+    def get_collection_by_id(self, collection_id: str) -> Optional[Collection]:
+        """Get a collection by ID only (without agent verification)"""
+        return (
+            self.db_session.query(Collection)
+            .filter(
+                Collection.id == collection_id,
+                Collection.active
+            )
+            .first()
+        )
 
     def get_formatted_collection_details(self, agent_id: str) -> str:
         """

@@ -43,7 +43,7 @@ class AgentCreateRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     id: str
-    tenant_id: str
+    user_id: str
     name: str
     phone_number: Optional[str]
     greeting: str
@@ -63,10 +63,10 @@ class AgentResponse(BaseModel):
     booking_enabled: Optional[bool] = None
     active: bool
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class PhoneNumberAssignment(BaseModel):
@@ -77,4 +77,3 @@ class AgentChatQuery(BaseModel):
     query: str
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
-

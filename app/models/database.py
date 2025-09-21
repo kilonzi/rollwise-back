@@ -1,7 +1,5 @@
 import uuid
-
 from sqlalchemy import (
-    create_engine,
     Column,
     String,
     DateTime,
@@ -10,79 +8,48 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
     Integer,
+    Float,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from app.config.settings import settings
 
 Base = declarative_base()
 
-
-class Tenant(Base):
-    __tablename__ = "tenants"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, nullable=False)
-    business_type = Column(String, nullable=True)
-    phone_number = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    address = Column(Text, nullable=True)
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # Relationships
-    user_tenants = relationship("UserTenant", back_populates="tenant")
-    agents = relationship("Agent", back_populates="tenant")
-    conversations = relationship("Conversation", back_populates="tenant")
+DATABASE_URL = settings.DATABASE_URL
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, nullable=False)
+    name = Column(String, nullable=True)
     email = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    firebase_uid = Column(String, unique=True, nullable=False)
+    email_verified = Column(Boolean, nullable=False, default=False)
     phone_number = Column(String, nullable=True)
+    photo_url = Column(String, nullable=True)
+    provider = Column(String, nullable=True)
+    user_metadata = Column(JSON, nullable=True)
     global_role = Column(String, default="user")  # user, platform_admin
-    access_token = Column(String, nullable=True)
-    refresh_token = Column(String, nullable=True)
-    reset_token = Column(String, nullable=True)
-    reset_token_expires = Column(DateTime, nullable=True)
-    last_login = Column(DateTime, nullable=True)
-    email_verified = Column(Boolean, default=False)
-    email_verification_token = Column(String, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    user_tenants = relationship("UserTenant", back_populates="user")
-
-
-class UserTenant(Base):
-    __tablename__ = "user_tenants"
-
-    user_id = Column(String, ForeignKey('users.id'), primary_key=True)
-    tenant_id = Column(String, ForeignKey('tenants.id'), primary_key=True)
-    role = Column(String, default='user')  # owner, user, platform_admin
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # Relationships
-    user = relationship("User")
-    tenant = relationship("Tenant")
+    agents = relationship("Agent", back_populates="user")
 
 
 class Agent(Base):
     __tablename__ = "agents"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
     phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
@@ -109,8 +76,9 @@ class Agent(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    tenant = relationship("Tenant", back_populates="agents")
+    user = relationship("User", back_populates="agents")
     conversations = relationship("Conversation", back_populates="agent")
+    orders = relationship("Order", back_populates="agent")
     board = relationship("Board", back_populates="agent", uselist=False)
 
 
@@ -118,7 +86,6 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    tenant_id = Column(String, ForeignKey("tenants.id"), nullable=False)
     agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
     session_name = Column(String, nullable=False)  # e.g., "Call with +1234567890"
     conversation_type = Column(String, nullable=False)  # voice, message
@@ -134,7 +101,6 @@ class Conversation(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    tenant = relationship("Tenant", back_populates="conversations")
     agent = relationship("Agent", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", order_by="Message.sequence_number")
     tool_calls = relationship("ToolCall", back_populates="conversation")
@@ -199,28 +165,39 @@ class Board(Base):
 
     # Relationships
     agent = relationship("Agent", back_populates="board")
-    items = relationship("BoardItem", back_populates="board", cascade="all, delete-orphan")
 
-
-class BoardItem(Base):
-    __tablename__ = "board_items"
+class Order(Base):
+    __tablename__ = "orders"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    board_id = Column(String, ForeignKey("boards.id"), nullable=False)
-    title = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    lane_id = Column(String, nullable=False, default="new")
-    labels = Column(JSON, default=list)  # List of label IDs from board labels
-    priority = Column(String, default="medium")  # low, medium, high, urgent
-    assignee = Column(String, nullable=True)
-    due_date = Column(DateTime, nullable=True)
-    item_metadata = Column(JSON, default=dict)  # Additional data like conversation_id, caller_info, etc.
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    customer_phone = Column(String, nullable=True)
+    customer_name = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="new")  # e.g., new, in_progress, ready, completed
+    total_price = Column(Float, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    board = relationship("Board", back_populates="items")
+    agent = relationship("Agent", back_populates="orders")
+    conversation = relationship("Conversation")
+    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(String, ForeignKey("orders.id"), nullable=False)
+    name = Column(String, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    price = Column(Float, nullable=False)
+    note = Column(Text, nullable=True)
+
+    # Relationships
+    order = relationship("Order", back_populates="order_items")
 
 
 class Collection(Base):
@@ -247,43 +224,17 @@ class Collection(Base):
     agent = relationship("Agent")
 
 
-# Database setup
-# Database setup with connection pooling
-engine_kwargs = {
-    "echo": False,
-    "pool_pre_ping": True,  # Validate connections before use
-    "pool_recycle": 300,    # Recycle connections every 5 minutes
-}
-
-# Add connection pooling for non-SQLite databases
-if not settings.DATABASE_URL.startswith("sqlite"):
-    engine_kwargs.update({
-        "pool_size": 20,        # Connection pool size
-        "max_overflow": 30,     # Max connections beyond pool_size
-        "pool_timeout": 30,     # Timeout for getting connection
-    })
-
-engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def create_tables():
-    """Create all database tables"""
-    Base.metadata.create_all(bind=engine)
-
-
-def get_db():
-    """Database dependency for FastAPI with enhanced error handling"""
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception as e:
-        db.rollback()
-        raise e
-    finally:
-        db.close()
-
 
 def get_db_session():
-    """Get a database session for non-FastAPI usage"""
     return SessionLocal()
+
+def create_tables():
+    Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = get_db_session()
+    print("Database session created")
+    try:
+        yield db
+    finally:
+        db.close()
