@@ -229,6 +229,17 @@ async def agent_websocket_handler(
             deepgram_ws = dg_connection
             logger.info("[DEEPGRAM] Connected to Deepgram")
 
+            # Send configuration first and wait for confirmation before starting tasks
+            try:
+                await deepgram_service.send_config(deepgram_ws)
+                logger.info("[DEEPGRAM] Configuration sent successfully")
+                # Wait longer to ensure Deepgram processes the config
+                await asyncio.sleep(0.5)
+            except Exception as config_error:
+                logger.error(f"[DEEPGRAM] Failed to send configuration: {config_error}")
+                await cleanup_resources()
+                return
+
             async def cleanup_resources():
                 nonlocal cleanup_completed
                 if cleanup_completed:
@@ -254,9 +265,15 @@ async def agent_websocket_handler(
             async def audio_sender():
                 nonlocal cleanup_completed
                 try:
+                    # Wait a bit more before starting to send audio
+                    await asyncio.sleep(0.2)
                     while not cleanup_completed:
                         audio_chunk = await audio_queue.get()
                         if audio_chunk is None:
+                            break
+                        # Add connection check before sending
+                        if deepgram_ws.closed:
+                            logger.warning("Deepgram connection closed, stopping audio sender")
                             break
                         await deepgram_service.send_audio(deepgram_ws, audio_chunk)
                 except asyncio.CancelledError:
@@ -344,21 +361,10 @@ async def agent_websocket_handler(
                     await cleanup_resources()
 
             tasks = [
-                asyncio.create_task(audio_sender()),
                 asyncio.create_task(deepgram_receiver()),
                 asyncio.create_task(twilio_receiver()),
+                asyncio.create_task(audio_sender()),  # Start audio sender last
             ]
-
-            # Add delay and error handling for config send
-            try:
-                await deepgram_service.send_config(deepgram_ws)
-                logger.info("[DEEPGRAM] Configuration sent successfully")
-                # Small delay to let Deepgram process the config
-                await asyncio.sleep(0.1)
-            except Exception as config_error:
-                logger.error(f"[DEEPGRAM] Failed to send configuration: {config_error}")
-                await cleanup_resources()
-                return
 
             await asyncio.gather(*tasks, return_exceptions=True)
             await cleanup_resources()
