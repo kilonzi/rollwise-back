@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import json
 import time
 import uuid
@@ -14,10 +13,8 @@ from twilio.twiml.voice_response import VoiceResponse, Connect
 
 from app.config.settings import settings
 from app.models import Agent, Conversation, ToolCall, Message, get_db
-from app.services.agent_service import AgentService
 from app.services.audio_service import AudioService
 from app.services.conversation_service import ConversationService
-from app.services.deepgram_service import DeepgramService
 from app.services.order_service import OrderService
 from app.tools.registry import global_registry
 from app.utils.logging_config import app_logger as logger
@@ -27,6 +24,7 @@ from app.utils.twilio_utils import (
     create_twilio_conversation,
     build_clean_websocket_url,
 )
+from app.websocket.session_manager import WebSocketSession
 
 router = APIRouter()
 
@@ -175,205 +173,38 @@ async def agent_websocket_handler(
         agent_id: str,
         conversation_id: str,
 ):
-    """Handle Twilio WebSocket audio stream for specific agent"""
+    """Handle Twilio WebSocket audio stream for specific agent - Refactored Version"""
     logger.info("[WS] WebSocket connection request for agent %s, conversation %s", agent_id, conversation_id)
     await websocket.accept()
     logger.info("[WS] WebSocket connection accepted")
 
     db_session = None
+    session = None
+
     try:
+        # Get database session
         db_session = next(get_db())
-        agent_service = AgentService(db_session)
-        conversation_service = ConversationService(db_session)
 
-        agent = agent_service.get_agent_by_id(agent_id)
+        # Create and setup WebSocket session
+        session = WebSocketSession(websocket, agent_id, conversation_id, db_session)
 
-        if not agent:
-            logger.warning("[WS] Agent %s not found or inactive", agent_id)
-            await websocket.close(code=1008, reason="Business not available")
+        # Setup all components (validation, configuration, services)
+        if not await session.setup():
+            logger.error("[WS] Session setup failed")
             return
 
-        logger.info("[WS] Agent found: %s (%s)", agent.name, agent.id)
-
-        conversation = conversation_service.get_conversation(conversation_id)
-        if not conversation:
-            logger.warning("[WS] Conversation %s not found.", conversation_id)
-            await websocket.close(code=1011, reason="Conversation not found")
-            return
-        logger.info("[WS] Using conversation: %s", conversation.id)
-
-        audio_queue = asyncio.Queue()
-        stream_sid_queue = asyncio.Queue()
-        cleanup_completed = False
-        user_audio_buffer = []
-        agent_audio_buffer = []
-
-        agent_config = agent_service.build_agent_config(
-            agent=agent,
-            phone_number=conversation.caller_phone,
-            conversation_id=conversation.id
-        )
-
-        logger.info(
-            f"[WS] Built agent config with {len(agent_config.get('agent', {}).get('think', {}).get('functions', []))} functions")
-
-        if not agent_config:
-            logger.error("[WS] Failed to build agent configuration")
-            await websocket.close(code=1011, reason="Agent configuration error")
-            return
-
-        deepgram_service = DeepgramService(agent_config)
-        logger.info("[DEEPGRAM] Service created with comprehensive config")
-
-        async with deepgram_service.connect() as dg_connection:
-            deepgram_ws = dg_connection
-            logger.info("[DEEPGRAM] Connected to Deepgram")
-
-            # Send configuration first and wait for confirmation before starting tasks
-            try:
-                await deepgram_service.send_config(deepgram_ws)
-                logger.info("[DEEPGRAM] Configuration sent successfully")
-                # Wait longer to ensure Deepgram processes the config
-                await asyncio.sleep(0.5)
-            except Exception as config_error:
-                logger.error(f"[DEEPGRAM] Failed to send configuration: {config_error}")
-                await cleanup_resources()
-                return
-
-            async def cleanup_resources():
-                nonlocal cleanup_completed
-                if cleanup_completed:
-                    return
-                cleanup_completed = True
-                logger.info("Starting cleanup...")
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                try:
-                    if conversation:
-                        conversation_service.end_conversation(conversation.id)
-                        logger.info("Ended conversation: %s", conversation.id)
-                except Exception as cleanup_error:
-                    logger.exception("Error ending conversation: %s", cleanup_error)
-                try:
-                    if not websocket.client_state.DISCONNECTED:
-                        await websocket.close()
-                        logger.info("WebSocket closed")
-                except Exception as ws_error:
-                    logger.exception("Error closing WebSocket: %s", ws_error)
-
-            async def audio_sender():
-                nonlocal cleanup_completed
-                try:
-                    # Wait a bit more before starting to send audio
-                    await asyncio.sleep(0.2)
-                    while not cleanup_completed:
-                        audio_chunk = await audio_queue.get()
-                        if audio_chunk is None:
-                            break
-                        # Add connection check before sending
-                        if deepgram_ws.closed:
-                            logger.warning("Deepgram connection closed, stopping audio sender")
-                            break
-                        await deepgram_service.send_audio(deepgram_ws, audio_chunk)
-                except asyncio.CancelledError:
-                    logger.info("Audio sender cancelled")
-                except Exception as sender_error:
-                    logger.exception("Audio sender error: %s", sender_error)
-                    await cleanup_resources()
-
-            async def deepgram_receiver():
-                nonlocal cleanup_completed
-                try:
-                    async for message in deepgram_ws:
-                        if cleanup_completed:
-                            break
-                        try:
-                            if isinstance(message, str):
-                                data = json.loads(message)
-                                event_type = data.get("type")
-
-                                if event_type == "ConversationText":
-                                    await handle_conversation_text(
-                                        data, conversation, db_session, user_audio_buffer, agent_audio_buffer
-                                    )
-                                elif event_type == "FunctionCallRequest":
-                                    await handle_function_call_request(
-                                        data, deepgram_ws, conversation, db_session
-                                    )
-                                else:
-                                    await handle_deepgram_event(
-                                        data, conversation, db_session, user_audio_buffer, agent_audio_buffer
-                                    )
-                            elif isinstance(message, bytes):
-                                audio_b64 = base64.b64encode(message).decode('utf-8')
-                                stream_sid = await stream_sid_queue.get()
-                                media_message = {
-                                    "event": "media",
-                                    "streamSid": stream_sid,
-                                    "media": {
-                                        "payload": audio_b64
-                                    }
-                                }
-                                stream_sid_queue.put_nowait(stream_sid)
-                                agent_audio_buffer.append(message)
-                                await websocket.send_text(json.dumps(media_message))
-                        except Exception as receiver_error:
-                            logger.exception("Deepgram message error: %s", receiver_error)
-                            continue
-                except asyncio.CancelledError:
-                    logger.info("Deepgram receiver cancelled")
-                except Exception as receiver_error:
-                    logger.exception("Deepgram receiver error: %s", receiver_error)
-                    await cleanup_resources()
-
-            async def twilio_receiver():
-                nonlocal cleanup_completed
-                try:
-                    while not cleanup_completed:
-                        message = await websocket.receive_text()
-                        try:
-                            data = json.loads(message)
-                            if data.get("event") == "start":
-                                stream_sid = data["start"]["streamSid"]
-                                stream_sid_queue.put_nowait(stream_sid)
-                                logger.info("Call started: %s", stream_sid)
-                            elif data.get("event") == "media":
-                                media = data["media"]
-                                audio_chunk = base64.b64decode(media["payload"])
-                                if audio_chunk:
-                                    audio_queue.put_nowait(audio_chunk)
-                                    user_audio_buffer.append(audio_chunk)
-                            elif data.get("event") == "stop":
-                                logger.info("Call stop event received")
-                                audio_queue.put_nowait(None)
-                                await cleanup_resources()
-                        except json.JSONDecodeError:
-                            logger.warning("Invalid JSON received from Twilio")
-                            continue
-                        except Exception as msg_error:
-                            logger.exception("Twilio message error: %s", msg_error)
-                            continue
-                except asyncio.CancelledError:
-                    logger.info("Twilio receiver cancelled")
-                except Exception as twilio_error:
-                    logger.exception("Twilio receiver error: %s", twilio_error)
-                    await cleanup_resources()
-
-            tasks = [
-                asyncio.create_task(deepgram_receiver()),
-                asyncio.create_task(twilio_receiver()),
-                asyncio.create_task(audio_sender()),  # Start audio sender last
-            ]
-
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await cleanup_resources()
+        # Start processing (Deepgram connection, message handling, audio streaming)
+        await session.start_processing()
 
     except Exception as e:
-        logger.exception("WebSocket handler error: %s", e)
+        logger.exception(f"[WS] WebSocket handler error: {e}")
     finally:
+        # Cleanup is handled by the session manager
+        if session:
+            await session.cleanup()
         if db_session:
             db_session.close()
+        logger.info("[WS] WebSocket handler completed")
 
 
 async def handle_deepgram_event(

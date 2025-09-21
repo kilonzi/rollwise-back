@@ -24,7 +24,6 @@ class AgentService:
     def build_agent_config(self, agent: Agent, phone_number: str = None, conversation_id: str = None) -> Dict[str, Any]:
         """Build Deepgram agent configuration using unified context builder"""
         try:
-
             return self.context_builder.build_complete_agent_config(
                 agent=agent,
                 phone_number=phone_number,
@@ -37,6 +36,7 @@ class AgentService:
                 "agent": {
                     "speak": {
                         "provider": {
+                            "type": "deepgram",
                             "model": agent.voice_model or "aura-2-thalia-en"
                         }
                     },
