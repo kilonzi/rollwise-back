@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy app code
 COPY . .
 
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
+
 # Set environment variables for production
 ENV PYTHONUNBUFFERED=1 \
     PORT=8080
@@ -31,5 +34,5 @@ USER appuser
 EXPOSE 8080
 
 # Entrypoint for Cloud Run
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
-
