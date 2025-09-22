@@ -44,11 +44,17 @@ class Settings(BaseSettings):
     # Voice Configuration
     VOICE: str = os.getenv("VOICE", "aura-2-thalia-en")
 
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/rollwise",
-    )
+    # Database Configuration
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if not DATABASE_URL:  # fallback for Cloud Run socket style
+        DB_USER = os.getenv("DB_USER")
+        DB_PASS = os.getenv("DB_PASS")
+        DB_NAME = os.getenv("DB_NAME", "rollwise-db")
+        DB_HOST = os.getenv("DB_HOST", "/cloudsql/lister-1234:us-central1:rollwise")
+        DB_PORT = os.getenv("DB_PORT", "")
+        DATABASE_URL = (
+            f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@/{DB_NAME}?host={DB_HOST}&port={DB_PORT}"
+        )
 
     # ChromaDB Cloud
     CHROMA_API_KEY: str = os.getenv("CHROMA_API_KEY", "")
