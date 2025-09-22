@@ -16,10 +16,14 @@ class UserService:
     """Service for user management and authentication (firebase-based)"""
 
     @staticmethod
-    def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(
+        data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+    ) -> str:
         """Create a JWT access token"""
         to_encode = data.copy()
-        expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        expire = datetime.utcnow() + (
+            expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -35,10 +39,14 @@ class UserService:
     @staticmethod
     def upsert_user(db: Session, user_data: Dict[str, Any]) -> User:
         """Create or update a user by firebase_uid/email."""
-        user = db.query(User).filter(
-            (User.firebase_uid == user_data["firebase_uid"]) |
-            (User.email == user_data["email"])
-        ).first()
+        user = (
+            db.query(User)
+            .filter(
+                (User.firebase_uid == user_data["firebase_uid"])
+                | (User.email == user_data["email"])
+            )
+            .first()
+        )
         if user:
             user.email = user_data["email"]
             user.firebase_uid = user_data["firebase_uid"]

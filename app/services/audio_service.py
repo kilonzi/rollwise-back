@@ -15,12 +15,12 @@ class AudioService:
 
     @staticmethod
     def save_audio_chunks(
-            audio_chunks: List[bytes],
-            conversation_id: str,
-            message_id: str,
-            role: str,
-            sample_rate: int = 8000,
-            channels: int = 1
+        audio_chunks: List[bytes],
+        conversation_id: str,
+        message_id: str,
+        role: str,
+        sample_rate: int = 8000,
+        channels: int = 1,
     ) -> Optional[str]:
         """Save audio chunks to a WAV file using the predictable path store/audio/{conversation_id}/{message_id}.wav"""
         try:
@@ -37,10 +37,10 @@ class AudioService:
             if not audio_chunks:
                 return None
 
-            combined_audio = b''.join(audio_chunks)
+            combined_audio = b"".join(audio_chunks)
 
             # Save as WAV file
-            with wave.open(file_path, 'wb') as wav_file:
+            with wave.open(file_path, "wb") as wav_file:
                 wav_file.setnchannels(channels)
                 wav_file.setsampwidth(2)  # 16-bit audio
                 wav_file.setframerate(sample_rate)
@@ -84,7 +84,7 @@ class AudioService:
             if os.path.exists(audio_dir):
                 files = []
                 for file in os.listdir(audio_dir):
-                    if file.endswith('.wav'):
+                    if file.endswith(".wav"):
                         files.append(os.path.join(audio_dir, file))
                 return sorted(files)
         except Exception as e:

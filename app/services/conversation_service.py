@@ -19,12 +19,12 @@ class ConversationService:
         self.model = vertex_client.get_model()
 
     def create_conversation(
-            self,
-            agent_id: str,
-            caller_phone: str,
-            conversation_type: str,
-            session_name: str,
-            twilio_sid: Optional[str] = None,
+        self,
+        agent_id: str,
+        caller_phone: str,
+        conversation_type: str,
+        session_name: str,
+        twilio_sid: Optional[str] = None,
     ) -> Conversation:
         """Create a new conversation and automatically create a preemptive order"""
         conversation = Conversation(
@@ -38,15 +38,19 @@ class ConversationService:
         self.db.add(conversation)
         self.db.commit()
         self.db.refresh(conversation)
-        logger.info("Created new conversation %s for agent %s", conversation.id, agent_id)
+        logger.info(
+            "Created new conversation %s for agent %s", conversation.id, agent_id
+        )
 
         return conversation
 
-
-
     def end_conversation(self, conversation_id: str) -> bool:
         """End a conversation and calculate duration"""
-        conversation = self.db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        conversation = (
+            self.db.query(Conversation)
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
         if not conversation:
             return False
         conversation.ended_at = datetime.now()
@@ -59,51 +63,76 @@ class ConversationService:
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """Get conversation by ID"""
-        return self.db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.active).first()
+        return (
+            self.db.query(Conversation)
+            .filter(Conversation.id == conversation_id, Conversation.active)
+            .first()
+        )
 
     def add_message(
-            self,
-            conversation_id: str,
-            role: str,
-            content: str,
-            audio_file_path: Optional[str] = None,
-            message_type: str = "conversation"
+        self,
+        conversation_id: str,
+        role: str,
+        content: str,
+        audio_file_path: Optional[str] = None,
+        message_type: str = "conversation",
     ) -> Message:
         """Add a new message to a conversation."""
-        max_seq = self.db.query(func.max(Message.sequence_number)).filter(
-            Message.conversation_id == conversation_id).scalar() or 0
+        max_seq = (
+            self.db.query(func.max(Message.sequence_number))
+            .filter(Message.conversation_id == conversation_id)
+            .scalar()
+            or 0
+        )
         message = Message(
             conversation_id=conversation_id,
             role=role,
             content=content,
             audio_file_path=audio_file_path,
             sequence_number=max_seq + 1,
-            message_type=message_type
+            message_type=message_type,
         )
         self.db.add(message)
         self.db.commit()
         self.db.refresh(message)
-        logger.info("Added message #%s: %s -> %s...", message.sequence_number, role, content[:100])
+        logger.info(
+            "Added message #%s: %s -> %s...",
+            message.sequence_number,
+            role,
+            content[:100],
+        )
         return message
 
     def get_conversation_messages(self, conversation_id: str) -> List[Message]:
         """Get all messages for a conversation."""
-        return self.db.query(Message).filter(Message.conversation_id == conversation_id, Message.active).order_by(
-            Message.sequence_number).all()
+        return (
+            self.db.query(Message)
+            .filter(Message.conversation_id == conversation_id, Message.active)
+            .order_by(Message.sequence_number)
+            .all()
+        )
 
-    def update_message_audio(self, message_id: str, audio_file_path: str) -> Optional[Message]:
+    def update_message_audio(
+        self, message_id: str, audio_file_path: str
+    ) -> Optional[Message]:
         """Update a message with the path to its audio file."""
         message = self.db.query(Message).filter(Message.id == message_id).first()
         if message:
             message.audio_file_path = audio_file_path
             self.db.commit()
-            logger.info("Updated message %s with audio: %s", message_id, audio_file_path)
+            logger.info(
+                "Updated message %s with audio: %s", message_id, audio_file_path
+            )
         return message
 
-    async def summarize_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+    async def summarize_conversation(
+        self, conversation_id: str
+    ) -> Optional[Dict[str, Any]]:
         """Generate a comprehensive summary of the conversation."""
         if not self.model:
-            logger.warning("Summarization service not available. Vertex AI client not initialized.")
+            logger.warning(
+                "Summarization service not available. Vertex AI client not initialized."
+            )
             return None
 
         messages = self.get_messages_for_summary(conversation_id)
@@ -123,25 +152,50 @@ class ConversationService:
                 "participants": self._extract_participants(messages),
                 "key_topics": self._extract_key_topics(messages),
                 "duration_estimate": self._estimate_duration(messages),
-                "generated_at": messages[-1]["timestamp"] if messages else None
+                "generated_at": messages[-1]["timestamp"] if messages else None,
             }
-            logger.info("Generated summary for conversation %s: %d chars", conversation_id, len(summary))
+            logger.info(
+                "Generated summary for conversation %s: %d chars",
+                conversation_id,
+                len(summary),
+            )
             await self.store_summary_in_conversation(conversation_id, summary_data)
             return summary_data
         except Exception as e:
-            logger.exception("Error generating summary for conversation %s: %s", conversation_id, str(e))
-            return {"conversation_id": conversation_id, "summary": "Summary generation failed", "error": str(e),
-                    "message_count": len(messages)}
+            logger.exception(
+                "Error generating summary for conversation %s: %s",
+                conversation_id,
+                str(e),
+            )
+            return {
+                "conversation_id": conversation_id,
+                "summary": "Summary generation failed",
+                "error": str(e),
+                "message_count": len(messages),
+            }
 
     def get_messages_for_summary(self, conversation_id: str) -> List[dict]:
         """Get messages formatted for LLM summarization"""
         messages = self.get_conversation_messages(conversation_id)
-        return [{"role": msg.role, "content": msg.content, "timestamp": msg.created_at.isoformat(),
-                 "sequence": msg.sequence_number} for msg in messages if msg.message_type == "conversation"]
+        return [
+            {
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.created_at.isoformat(),
+                "sequence": msg.sequence_number,
+            }
+            for msg in messages
+            if msg.message_type == "conversation"
+        ]
 
     def _format_messages_for_llm(self, messages: List[Dict]) -> str:
         """Format messages for LLM processing"""
-        return "\n".join([f"[{msg['sequence']:03d}] {msg['role'].upper()}: {msg['content']}" for msg in messages])
+        return "\n".join(
+            [
+                f"[{msg['sequence']:03d}] {msg['role'].upper()}: {msg['content']}"
+                for msg in messages
+            ]
+        )
 
     def _get_summarization_prompt(self) -> str:
         """Get the system prompt for conversation summarization"""
@@ -171,13 +225,27 @@ Keep the summary professional, detailed, and focused on business-relevant inform
 
     def _extract_participants(self, messages: List[Dict]) -> List[str]:
         """Extract unique participants from messages"""
-        return list(set(msg["role"] for msg in messages if msg["role"] not in ["system"]))
+        return list(
+            set(msg["role"] for msg in messages if msg["role"] not in ["system"])
+        )
 
     def _extract_key_topics(self, messages: List[Dict]) -> List[str]:
         """Extract key topics mentioned in the conversation"""
         keywords = set()
-        common_business_terms = ["appointment", "booking", "price", "cost", "hours", "schedule", "service", "client",
-                                 "customer", "inventory", "product", "meeting"]
+        common_business_terms = [
+            "appointment",
+            "booking",
+            "price",
+            "cost",
+            "hours",
+            "schedule",
+            "service",
+            "client",
+            "customer",
+            "inventory",
+            "product",
+            "meeting",
+        ]
         for msg in messages:
             content_lower = msg["content"].lower()
             for term in common_business_terms:
@@ -196,21 +264,31 @@ Keep the summary professional, detailed, and focused on business-relevant inform
         else:
             return "> 10 minutes"
 
-    async def store_summary_in_conversation(self, conversation_id: str, summary_data: Dict[str, Any]):
+    async def store_summary_in_conversation(
+        self, conversation_id: str, summary_data: Dict[str, Any]
+    ):
         """Store the generated summary directly in the conversation table"""
-        if not summary_data or summary_data.get('error'):
-            logger.warning("No valid summary to store for conversation %s", conversation_id)
+        if not summary_data or summary_data.get("error"):
+            logger.warning(
+                "No valid summary to store for conversation %s", conversation_id
+            )
             return False
         try:
-            summary_text = summary_data.get('summary', 'No summary available')
-            success = self.update_conversation_summary(conversation_id=conversation_id, summary=summary_text)
+            summary_text = summary_data.get("summary", "No summary available")
+            success = self.update_conversation_summary(
+                conversation_id=conversation_id, summary=summary_text
+            )
             if success:
-                logger.info("Stored conversation summary in database for %s", conversation_id)
+                logger.info(
+                    "Stored conversation summary in database for %s", conversation_id
+                )
             else:
                 logger.error("Failed to store summary for %s", conversation_id)
             return success
         except Exception as e:
-            logger.exception("Error storing summary for conversation %s: %s", conversation_id, str(e))
+            logger.exception(
+                "Error storing summary for conversation %s: %s", conversation_id, str(e)
+            )
             return False
 
     def update_conversation_summary(self, conversation_id: str, summary: str) -> bool:
@@ -229,7 +307,9 @@ Keep the summary professional, detailed, and focused on business-relevant inform
                 logger.info("Updated conversation %s with summary", conversation_id)
                 return True
             else:
-                logger.warning("Conversation %s not found for summary update", conversation_id)
+                logger.warning(
+                    "Conversation %s not found for summary update", conversation_id
+                )
                 return False
 
         except Exception as e:
@@ -238,7 +318,7 @@ Keep the summary professional, detailed, and focused on business-relevant inform
             return False
 
     def get_agent_conversations(
-            self, agent_id: str, limit: int = 50, offset: int = 0
+        self, agent_id: str, limit: int = 50, offset: int = 0
     ) -> List[Conversation]:
         """Get conversations for an agent"""
         return (
@@ -256,7 +336,7 @@ Keep the summary professional, detailed, and focused on business-relevant inform
         )
 
     def get_caller_conversations(
-            self, caller_phone: str, agent_id: str = None, limit: int = 10
+        self, caller_phone: str, agent_id: str = None, limit: int = 10
     ) -> List[Conversation]:
         """Get conversation history for a specific caller"""
         query = (

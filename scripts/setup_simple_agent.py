@@ -44,7 +44,7 @@ def upload_datasets():
     datasets = [
         ("clients", CLIENT_DATA),
         ("hours", HOURS_DATA),
-        ("pricing", PRICING_DATA)
+        ("pricing", PRICING_DATA),
     ]
 
     for label, data in datasets:
@@ -54,22 +54,21 @@ def upload_datasets():
 
         try:
             # Upload to agent
-            with open(temp_file, 'rb') as f:
+            with open(temp_file, "rb") as f:
                 files = {"file": (f"sample_{label}.csv", f, "text/csv")}
-                form_data = {
-                    "label": label,
-                    "replace_existing": "true"
-                }
+                form_data = {"label": label, "replace_existing": "true"}
 
                 response = requests.post(
                     f"{BASE_URL}/datasets/upload/{AGENT_ID}",
                     files=files,
-                    data=form_data
+                    data=form_data,
                 )
 
             if response.status_code == 200:
                 result = response.json()
-                logger.info("Uploaded %s: %s records", label, result.get('record_count'))
+                logger.info(
+                    "Uploaded %s: %s records", label, result.get("record_count")
+                )
             else:
                 logger.error("Failed to upload %s: %s", label, response.text)
 
@@ -88,20 +87,17 @@ def test_search():
     test_queries = [
         {"label": "clients", "query": "John", "description": "Search for John"},
         {"label": "hours", "return_all": True, "description": "Get all hours"},
-        {"label": "pricing", "query": "haircut", "description": "Find haircut price"}
+        {"label": "pricing", "query": "haircut", "description": "Find haircut price"},
     ]
 
     for query in test_queries:
-        logger.info("%s", query['description'])
-        response = requests.post(
-            f"{BASE_URL}/datasets/search/{AGENT_ID}",
-            json=query
-        )
+        logger.info("%s", query["description"])
+        response = requests.post(f"{BASE_URL}/datasets/search/{AGENT_ID}", json=query)
 
         if response.status_code == 200:
             result = response.json()
             if result.get("success") and result.get("count", 0) > 0:
-                logger.info("Found %s results", result.get('count'))
+                logger.info("Found %s results", result.get("count"))
             else:
                 logger.info("No results found")
         else:
@@ -151,7 +147,9 @@ def main():
     show_examples()
 
     logger.info("Setup complete! Your agent now has dataset search capabilities.")
-    logger.info("The agent will automatically use the search_agent_dataset function when customers ask questions about your business data.")
+    logger.info(
+        "The agent will automatically use the search_agent_dataset function when customers ask questions about your business data."
+    )
 
 
 if __name__ == "__main__":

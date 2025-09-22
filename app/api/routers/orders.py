@@ -100,7 +100,9 @@ def update_order_item(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to update order item: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to update order item: {str(e)}"
+        )
 
 
 @router.delete(
@@ -120,7 +122,9 @@ def delete_order_item(item_id: int, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to delete order item: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to delete order item: {str(e)}"
+        )
 
 
 @router.get(
@@ -130,8 +134,14 @@ def delete_order_item(item_id: int, db: Session = Depends(get_db)):
 )
 def get_agent_orders(
     agent_id: str,
-    start_date: Optional[date] = Query(None, description="Start date for filtering orders (YYYY-MM-DD). Defaults to today."),
-    end_date: Optional[date] = Query(None, description="End date for filtering orders (YYYY-MM-DD). Defaults to today."),
+    start_date: Optional[date] = Query(
+        None,
+        description="Start date for filtering orders (YYYY-MM-DD). Defaults to today.",
+    ),
+    end_date: Optional[date] = Query(
+        None,
+        description="End date for filtering orders (YYYY-MM-DD). Defaults to today.",
+    ),
     db: Session = Depends(get_db),
 ):
     """
@@ -149,7 +159,9 @@ def get_agent_orders(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to retrieve orders: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to retrieve orders: {str(e)}"
+        )
 
 
 @router.put(
@@ -171,4 +183,6 @@ def update_order_status(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to update order status: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to update order status: {str(e)}"
+        )

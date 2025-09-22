@@ -1,4 +1,3 @@
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -20,7 +19,7 @@ class UserPayload(BaseModel):
 
 
 async def get_current_user(
-        credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> UserPayload:
     """
     Verifies JWT token and returns the user payload as a Pydantic model.
@@ -39,9 +38,9 @@ async def get_current_user(
 
 
 def validate_agent_access(
-        agent_id: str,
-        current_user: UserPayload = Depends(get_current_user),
-        db: Session = Depends(get_db)
+    agent_id: str,
+    current_user: UserPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> type[Agent]:
     """
     Validates that the current user has access to the requested agent.

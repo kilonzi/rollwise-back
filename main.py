@@ -5,7 +5,16 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import users, agents, conversations, communication, orders, statistics, collections, menu_items
+from app.api.routers import (
+    users,
+    agents,
+    conversations,
+    communication,
+    orders,
+    statistics,
+    collections,
+    menu_items,
+)
 from app.config.settings import settings
 from app.models import create_tables
 from app.utils.logging_config import app_logger as logger
@@ -40,7 +49,9 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS.split(",") if settings.ALLOWED_ORIGINS else ["http://localhost:3000"],
+    allow_origins=settings.ALLOWED_ORIGINS.split(",")
+    if settings.ALLOWED_ORIGINS
+    else ["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],

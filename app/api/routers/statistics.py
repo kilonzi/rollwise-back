@@ -14,9 +14,11 @@ router = APIRouter()
 @router.get("/{agent_id}/statistics/", response_model=AgentStatistics)
 def get_agent_statistics(
     agent: Agent = Depends(validate_agent_access),
-    start_date: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
+    start_date: Optional[str] = Query(
+        None, description="Start date in YYYY-MM-DD format"
+    ),
     end_date: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get comprehensive statistics for an agent within a date range.
@@ -42,7 +44,10 @@ def get_agent_statistics(
             parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d")
         except ValueError:
             from fastapi import HTTPException
-            raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+
+            raise HTTPException(
+                status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD"
+            )
 
     if end_date:
         try:
@@ -51,17 +56,21 @@ def get_agent_statistics(
             )
         except ValueError:
             from fastapi import HTTPException
-            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+
+            raise HTTPException(
+                status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD"
+            )
 
     # Validate date range
     if parsed_start_date and parsed_end_date and parsed_start_date > parsed_end_date:
         from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
+
+        raise HTTPException(
+            status_code=400, detail="start_date cannot be after end_date"
+        )
 
     # Get statistics
     statistics_service = StatisticsService(db)
     return statistics_service.get_agent_statistics(
-        agent_id=agent.id,
-        start_date=parsed_start_date,
-        end_date=parsed_end_date
+        agent_id=agent.id, start_date=parsed_start_date, end_date=parsed_end_date
     )

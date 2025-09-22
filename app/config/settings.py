@@ -20,7 +20,9 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
-    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+    ALLOWED_ORIGINS: str = os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080"
+    )
 
     # API Keys - Required
     DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY", "")
@@ -29,7 +31,9 @@ class Settings(BaseSettings):
     ELEVEN_LABS_API_KEY: str = os.getenv("ELEVEN_LABS_API_KEY", "")
 
     # Google Calendar Integration
-    GOOGLE_CALENDAR_CREDENTIALS_PATH: str = os.getenv("GOOGLE_CALENDAR_CREDENTIALS_PATH", "./credentials.json")
+    GOOGLE_CALENDAR_CREDENTIALS_PATH: str = os.getenv(
+        "GOOGLE_CALENDAR_CREDENTIALS_PATH", "./credentials.json"
+    )
     GOOGLE_CALENDAR_DOMAIN: str = os.getenv("GOOGLE_CALENDAR_DOMAIN", "")
 
     # Google Cloud Configuration
@@ -41,7 +45,10 @@ class Settings(BaseSettings):
     VOICE: str = os.getenv("VOICE", "aura-2-thalia-en")
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/rollwise")
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/rollwise",
+    )
 
     # ChromaDB Cloud
     CHROMA_API_KEY: str = os.getenv("CHROMA_API_KEY", "")

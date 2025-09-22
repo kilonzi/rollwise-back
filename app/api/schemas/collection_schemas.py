@@ -5,8 +5,12 @@ from datetime import datetime
 
 class CollectionBase(BaseModel):
     display_name: str = Field(..., description="The display name of the collection.")
-    description: Optional[str] = Field(None, description="A brief description of the collection's content.")
-    notes: Optional[str] = Field(None, description="Notes or rules for how the agent should use this collection.")
+    description: Optional[str] = Field(
+        None, description="A brief description of the collection's content."
+    )
+    notes: Optional[str] = Field(
+        None, description="Notes or rules for how the agent should use this collection."
+    )
 
 
 class CollectionCreate(CollectionBase):
@@ -28,14 +32,22 @@ class Collection(CollectionBase):
 
 class CollectionCreateRequest(BaseModel):
     """Request model for creating a new collection"""
+
     name: str = Field(..., description="Display name for the collection")
-    description: Optional[str] = Field(None, description="Description of the collection content")
-    notes: Optional[str] = Field(None, description="Additional notes or usage instructions")
-    text_content: Optional[str] = Field(None, description="Text content to be ingested (alternative to file upload)")
+    description: Optional[str] = Field(
+        None, description="Description of the collection content"
+    )
+    notes: Optional[str] = Field(
+        None, description="Additional notes or usage instructions"
+    )
+    text_content: Optional[str] = Field(
+        None, description="Text content to be ingested (alternative to file upload)"
+    )
 
 
 class CollectionResponse(BaseModel):
     """Response model for collection operations"""
+
     id: str
     agent_id: str
     name: str
@@ -59,12 +71,14 @@ class CollectionResponse(BaseModel):
 
 class CollectionListResponse(BaseModel):
     """Response model for listing collections"""
+
     collections: list[CollectionResponse]
     total: int
 
 
 class CollectionCreateResponse(BaseModel):
     """Response model for collection creation"""
+
     success: bool
     collection: Optional[CollectionResponse] = None
     message: str

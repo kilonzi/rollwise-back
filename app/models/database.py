@@ -55,24 +55,59 @@ class Agent(Base):
     name = Column(String, nullable=False)
     phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
-    voice_model = Column(String, default="aura-2-thalia-en")  # Deepgram voice model (fallback)
+    voice_model = Column(
+        String, default="aura-2-thalia-en"
+    )  # Deepgram voice model (fallback)
     eleven_labs_voice_id = Column(String, nullable=True)  # ElevenLabs voice ID
-    voice_provider = Column(String, default="eleven_labs")  # "eleven_labs" or "deepgram"
+    voice_provider = Column(
+        String, default="eleven_labs"
+    )  # "eleven_labs" or "deepgram"
     system_prompt = Column(Text, default="You are a helpful AI assistant.")
     language = Column(String, default="en")
     tools = Column(JSON, default=list)  # List of enabled tool names
 
     # Calendar Integration
     calendar_id = Column(String, nullable=True)  # Google Calendar ID
-    business_hours = Column(JSON,
-                            nullable=True)  # {"start": "09:00", "end": "17:00", "timezone": "UTC", "days": [1,2,3,4,5]}
+    timezone = Column(
+        String, default="America/New_York"
+    )  # Agent's timezone (e.g., "America/New_York", "Europe/London")
+    business_hours = Column(
+        JSON,
+        default=lambda: {
+            "mon": {"enabled": True, "open": "09:00", "close": "17:00"},
+            "tue": {"enabled": True, "open": "09:00", "close": "17:00"},
+            "wed": {"enabled": True, "open": "09:00", "close": "17:00"},
+            "thu": {"enabled": True, "open": "09:00", "close": "17:00"},
+            "fri": {"enabled": True, "open": "09:00", "close": "17:00"},
+            "sat": {"enabled": False, "open": "", "close": ""},
+            "sun": {"enabled": False, "open": "", "close": ""},
+        },
+    )  # Day-based business hours structure
+    after_hours_behavior = Column(
+        String, default="voicemail"
+    )  # voicemail, hangup, transfer, custom_message
+    after_hours_message = Column(Text, default="")  # Custom message for after hours
+    transfer_settings = Column(
+        JSON, nullable=True
+    )  # Transfer settings for call routing
     default_slot_duration = Column(Integer, default=30)  # minutes
-    max_slot_appointments = Column(Integer, default=1)  # max appointments per time slot to prevent overbooking
+    max_slot_appointments = Column(
+        Integer, default=1
+    )  # max appointments per time slot to prevent overbooking
     buffer_time = Column(Integer, default=10)  # minutes between appointments
-    blocked_dates = Column(JSON, nullable=True)  # ["2024-12-25", "2024-01-01"] - dates when agent is unavailable
-    invitees = Column(JSON,
-                      nullable=True)  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
-    booking_enabled = Column(Boolean, default=True)  # Whether calendar booking is enabled for this agent
+    blocked_dates = Column(
+        JSON, nullable=True
+    )  # ["2024-12-25", "2024-01-01"] - dates when agent is unavailable
+    invitees = Column(
+        JSON, nullable=True
+    )  # [{"name": "John Doe", "email": "john@example.com", "availability": "always"}] - default invitees for all events
+    booking_enabled = Column(
+        Boolean, default=True
+    )  # Whether calendar booking is enabled for this agent
+    closed = Column(
+        Boolean, default=False
+    )  # Temporarily disable new conversations/orders
+    closed_message = Column(Text, nullable=True)  # Message to play when agent is closed
 
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
@@ -106,7 +141,9 @@ class Conversation(Base):
 
     # Relationships
     agent = relationship("Agent", back_populates="conversations")
-    messages = relationship("Message", back_populates="conversation", order_by="Message.sequence_number")
+    messages = relationship(
+        "Message", back_populates="conversation", order_by="Message.sequence_number"
+    )
     tool_calls = relationship("ToolCall", back_populates="conversation")
 
 
@@ -117,7 +154,9 @@ class Message(Base):
     conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
     role = Column(String, nullable=False)  # "user" or "assistant"
     content = Column(Text, nullable=False)  # Message content
-    audio_file_path = Column(String, nullable=True)  # Path to audio file for this message
+    audio_file_path = Column(
+        String, nullable=True
+    )  # Path to audio file for this message
     sequence_number = Column(Integer, nullable=False)  # For chronological ordering
     message_type = Column(String, default="conversation")  # conversation, system, etc.
     active = Column(Boolean, default=True)
@@ -152,17 +191,28 @@ class Board(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     agent_id = Column(String, ForeignKey("agents.id"), nullable=False, unique=True)
     name = Column(String, nullable=False, default="Agent Board")
-    lanes = Column(JSON, default=lambda: [
-        {"id": "new", "name": "New", "color": "#2196F3", "wipLimit": None},
-        {"id": "in_progress", "name": "In Progress", "color": "#FF9800", "wipLimit": 5},
-        {"id": "done", "name": "Done", "color": "#4CAF50", "wipLimit": None}
-    ])
-    labels = Column(JSON, default=lambda: [
-        {"id": "urgent", "name": "Urgent", "color": "#F44336"},
-        {"id": "vip", "name": "VIP Customer", "color": "#9C27B0"},
-        {"id": "delivery", "name": "Delivery", "color": "#607D8B"},
-        {"id": "takeout", "name": "Takeout", "color": "#795548"}
-    ])
+    lanes = Column(
+        JSON,
+        default=lambda: [
+            {"id": "new", "name": "New", "color": "#2196F3", "wipLimit": None},
+            {
+                "id": "in_progress",
+                "name": "In Progress",
+                "color": "#FF9800",
+                "wipLimit": 5,
+            },
+            {"id": "done", "name": "Done", "color": "#4CAF50", "wipLimit": None},
+        ],
+    )
+    labels = Column(
+        JSON,
+        default=lambda: [
+            {"id": "urgent", "name": "Urgent", "color": "#F44336"},
+            {"id": "vip", "name": "VIP Customer", "color": "#9C27B0"},
+            {"id": "delivery", "name": "Delivery", "color": "#607D8B"},
+            {"id": "takeout", "name": "Takeout", "color": "#795548"},
+        ],
+    )
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -179,7 +229,9 @@ class Order(Base):
     conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
     customer_phone = Column(String, nullable=True)
     customer_name = Column(String, nullable=True)
-    status = Column(String, nullable=False, default="new")  # e.g., new, in_progress, ready, completed
+    status = Column(
+        String, nullable=False, default="new"
+    )  # e.g., new, in_progress, ready, completed
     total_price = Column(Float, nullable=True)
     active = Column(Boolean, default=True)
     pickup_time = Column(String, nullable=True)  # scheduled pickup time
@@ -194,7 +246,9 @@ class Order(Base):
     # Relationships
     agent = relationship("Agent", back_populates="orders")
     conversation = relationship("Conversation")
-    order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    order_items = relationship(
+        "OrderItem", back_populates="order", cascade="all, delete-orphan"
+    )
 
 
 class OrderItem(Base):
@@ -222,7 +276,9 @@ class Collection(Base):
     notes = Column(Text, nullable=True)
     file_path = Column(String(500), nullable=True)  # store/collections/{id}.{ext}
     file_type = Column(String(10), nullable=True)  # pdf, txt, csv, text
-    content_type = Column(String(50), nullable=True)  # auto-detected: menu, policy, faq, etc.
+    content_type = Column(
+        String(50), nullable=True
+    )  # auto-detected: menu, policy, faq, etc.
     chunk_count = Column(Integer, default=0)
     chroma_collection_name = Column(String, nullable=False)  # collection__{id}
     status = Column(String(20), default="processing")  # processing, ready, error
@@ -243,7 +299,9 @@ class MenuItem(Base):
     number = Column(String, nullable=True, index=True)  # unique identifier/menu number
     name = Column(String(200), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    category = Column(String(50), nullable=False, index=True)  # Appetizer, Entree, Drink, Dessert
+    category = Column(
+        String(50), nullable=False, index=True
+    )  # Appetizer, Entree, Drink, Dessert
     price = Column(Float, nullable=False)
     allergens = Column(Text, nullable=True)  # JSON array or comma-separated
     ingredients = Column(Text, nullable=True)

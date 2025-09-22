@@ -5,60 +5,21 @@ Contains predefined voice options that can be selected for agents.
 """
 
 ELEVEN_LABS_VOICES = [
-    {
-        "name": "Tiffiany",
-        "id": "6aDn1KB0hjpdcocrUkmq",
-        "gender": "female"
-    },
-    {
-        "name": "Jessica",
-        "id": "g6xIsTj2HwM6VR4iXFCw",
-        "gender": "female"
-    },
-    {
-        "name": "Cassidy",
-        "id": "56AoDkrOh6qfVPDXZ7Pt",
-        "gender": "female"
-    },
-    {
-        "name": "Jason",
-        "id": "UgBBYS2sOqTuMpoF3BR0",
-        "gender": "male"
-    },
-    {
-        "name": "Joe",
-        "id": "gs0tAILXbY5DNrJrsM6F",
-        "gender": "male"
-    },
-    {
-        "name": "Jojo",
-        "id": "c6SfcYrb2t09NHXiT80T",
-        "gender": "male"
-    }
+    {"name": "Tiffiany", "id": "6aDn1KB0hjpdcocrUkmq", "gender": "female"},
+    {"name": "Jessica", "id": "g6xIsTj2HwM6VR4iXFCw", "gender": "female"},
+    {"name": "Cassidy", "id": "56AoDkrOh6qfVPDXZ7Pt", "gender": "female"},
+    {"name": "Jason", "id": "UgBBYS2sOqTuMpoF3BR0", "gender": "male"},
+    {"name": "Joe", "id": "gs0tAILXbY5DNrJrsM6F", "gender": "male"},
+    {"name": "Jojo", "id": "c6SfcYrb2t09NHXiT80T", "gender": "male"},
 ]
 
 DEEPGRAM_VOICES = [
-    {
-        "name": "Thalia",
-        "id": "aura-2-thalia-en",
-        "gender": "female"
-    },
-    {
-        "name": "Andromeda",
-        "id": "aura-2-andromeda-en",
-        "gender": "female"
-    },
-    {
-        "name": "Orion",
-        "id": "aura-2-orion-en",
-        "gender": "male"
-    },
-    {
-        "name": "Helios",
-        "id": "aura-2-helios-en",
-        "gender": "male"
-    }
+    {"name": "Thalia", "id": "aura-2-thalia-en", "gender": "female"},
+    {"name": "Andromeda", "id": "aura-2-andromeda-en", "gender": "female"},
+    {"name": "Orion", "id": "aura-2-orion-en", "gender": "male"},
+    {"name": "Helios", "id": "aura-2-helios-en", "gender": "male"},
 ]
+
 
 def get_voice_choices() -> Dict[str, List[Dict[str, str]]]:
     """
@@ -67,12 +28,12 @@ def get_voice_choices() -> Dict[str, List[Dict[str, str]]]:
     Returns:
         Dict with ElevenLabs and Deepgram voice options
     """
-    return {
-        "eleven_labs": ELEVEN_LABS_VOICES,
-        "deepgram": DEEPGRAM_VOICES
-    }
+    return {"eleven_labs": ELEVEN_LABS_VOICES, "deepgram": DEEPGRAM_VOICES}
 
-def get_voice_by_id(voice_id: str, provider: Optional[str] = None) -> Optional[Dict[str, str]]:
+
+def get_voice_by_id(
+    voice_id: str, provider: Optional[str] = None
+) -> Optional[Dict[str, str]]:
     """
     Get voice information by ID.
 
@@ -97,6 +58,7 @@ def get_voice_by_id(voice_id: str, provider: Optional[str] = None) -> Optional[D
             return voice
 
     return None
+
 
 def validate_voice_id(voice_id: str, provider: str):
     """

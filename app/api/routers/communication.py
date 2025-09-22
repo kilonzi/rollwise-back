@@ -31,9 +31,7 @@ router = APIRouter()
 
 @router.post("/agent/{agent_id}/voice")
 async def handle_agent_voice_call(
-        agent_id: str,
-        request: Request,
-        db: Session = Depends(get_db)
+    agent_id: str, request: Request, db: Session = Depends(get_db)
 ):
     """Handle incoming voice calls for specific agent"""
 
@@ -52,17 +50,22 @@ async def handle_agent_voice_call(
             from_number=twilio_data["from_number"],
             call_sid=twilio_data["call_sid"],
             conversation_type="voice",
-            db=db
+            db=db,
         )
 
         try:
             order_service = OrderService()
             order_service.db = db  # Set the database session
             order_service.create_preemptive_order(conversation)
-            logger.info("[ORDER] Preemptive order created for conversation %s", conversation.id)
+            logger.info(
+                "[ORDER] Preemptive order created for conversation %s", conversation.id
+            )
         except Exception as order_error:
-            logger.error("[ORDER] Failed to create preemptive order for conversation %s: %s",
-                         conversation.id, str(order_error))
+            logger.error(
+                "[ORDER] Failed to create preemptive order for conversation %s: %s",
+                conversation.id,
+                str(order_error),
+            )
             # Don't fail the call if order creation fails
 
         logger.info("[VOICE] Conversation created: %s", conversation.id)
@@ -80,7 +83,9 @@ async def handle_agent_voice_call(
         logger.debug("[VOICE] Error TwiML: %s", str(response))
         return Response(content=str(response), media_type="application/xml")
 
-    websocket_url = build_clean_websocket_url(settings.BASE_URL, agent_id, conversation.id)
+    websocket_url = build_clean_websocket_url(
+        settings.BASE_URL, agent_id, conversation.id
+    )
     logger.debug("[VOICE] WebSocket URL: %s", websocket_url)
 
     response = VoiceResponse()
@@ -96,11 +101,11 @@ async def handle_agent_voice_call(
 
 @router.post("/agent/{agent_id}/messages")
 async def handle_agent_sms(
-        agent_id: str,
-        From: str = Form(...),
-        To: str = Form(...),
-        Body: str = Form(...),
-        db: Session = Depends(get_db)
+    agent_id: str,
+    From: str = Form(...),
+    To: str = Form(...),
+    Body: str = Form(...),
+    db: Session = Depends(get_db),
 ):
     """Handle incoming SMS messages for specific agent"""
     logger.info("[SMS] Incoming SMS for agent %s from %s", agent_id, From)
@@ -108,7 +113,7 @@ async def handle_agent_sms(
     twilio_data = {
         "from_number": From,
         "to_number": To,
-        "call_sid": f"sms_{int(time.time())}"
+        "call_sid": f"sms_{int(time.time())}",
     }
     body = Body.strip()
 
@@ -122,7 +127,7 @@ async def handle_agent_sms(
             from_number=twilio_data["from_number"],
             call_sid=twilio_data["call_sid"],
             conversation_type="sms",
-            db=db
+            db=db,
         )
         logger.info("[SMS] Conversation created/found: %s", conversation.id)
 
@@ -133,28 +138,21 @@ async def handle_agent_sms(
     conversation_service = ConversationService(db)
     conversation_service.add_message(conversation.id, "user", body)
 
-    logger.debug("SMS processing not implemented yet for conversation %s", conversation.id)
+    logger.debug(
+        "SMS processing not implemented yet for conversation %s", conversation.id
+    )
 
-    return {
-        "message": "SMS received",
-        "conversation_id": conversation.id
-    }
+    return {"message": "SMS received", "conversation_id": conversation.id}
 
 
 @router.post("/agent/{agent_id}/callback")
 async def handle_agent_callback(
-        agent_id: str,
-        request: Request,
-        db: Session = Depends(get_db)
+    agent_id: str, request: Request, db: Session = Depends(get_db)
 ):
     """Handle Twilio callbacks for specific agent"""
     logger.info("[CALLBACK] Received callback for agent %s", agent_id)
 
-    agent = (
-        db.query(Agent)
-        .filter(Agent.id == agent_id, Agent.active == True)
-        .first()
-    )
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.active == True).first()
     if not agent:
         logger.warning("[CALLBACK] Agent %s not found or inactive", agent_id)
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -169,12 +167,16 @@ async def handle_agent_callback(
 
 @router.websocket("/ws/{agent_id}/twilio/{conversation_id}")
 async def agent_websocket_handler(
-        websocket: WebSocket,
-        agent_id: str,
-        conversation_id: str,
+    websocket: WebSocket,
+    agent_id: str,
+    conversation_id: str,
 ):
     """Handle Twilio WebSocket audio stream for specific agent - Refactored Version"""
-    logger.info("[WS] WebSocket connection request for agent %s, conversation %s", agent_id, conversation_id)
+    logger.info(
+        "[WS] WebSocket connection request for agent %s, conversation %s",
+        agent_id,
+        conversation_id,
+    )
     await websocket.accept()
     logger.info("[WS] WebSocket connection accepted")
 
@@ -208,11 +210,11 @@ async def agent_websocket_handler(
 
 
 async def handle_deepgram_event(
-        event: dict,
-        conversation: Conversation,
-        db_session: Session,
-        user_audio_buffer: Optional[List[bytes]] = None,
-        agent_audio_buffer: Optional[List[bytes]] = None,
+    event: dict,
+    conversation: Conversation,
+    db_session: Session,
+    user_audio_buffer: Optional[List[bytes]] = None,
+    agent_audio_buffer: Optional[List[bytes]] = None,
 ):
     """Handle non-text events from Deepgram."""
     event_type = event.get("type")
@@ -220,11 +222,15 @@ async def handle_deepgram_event(
 
     if event_type == "UserEndedSpeaking":
         if user_audio_buffer:
-            logger.info("User stopped speaking. Final transcript will be saved with audio.")
+            logger.info(
+                "User stopped speaking. Final transcript will be saved with audio."
+            )
         return
     elif event_type == "AgentEndedSpeaking":
         if agent_audio_buffer:
-            logger.info("Agent stopped speaking. Final speech will be saved with audio.")
+            logger.info(
+                "Agent stopped speaking. Final speech will be saved with audio."
+            )
         return
     elif event_type == "UserStartedSpeaking":
         logger.info("User started speaking.")
@@ -235,7 +241,7 @@ async def handle_deepgram_event(
 
 
 async def execute_tenant_tool(
-        tool_name: str, tool_args: dict, conversation: Conversation, db_session: Session
+    tool_name: str, tool_args: dict, conversation: Conversation, db_session: Session
 ) -> dict:
     """Execute a tool within the tenant context using the unified registry."""
     tool_call = None
@@ -251,8 +257,13 @@ async def execute_tenant_tool(
         # Add agent_id for tools that need it
         if tool_name in ["search_collection"]:
             tool_args["agent_id"] = conversation.agent_id
-        elif tool_name in ["create_calendar_event", "list_calendar_events", "cancel_calendar_event",
-                           "search_calendar_events", "update_calendar_event"]:
+        elif tool_name in [
+            "create_calendar_event",
+            "list_calendar_events",
+            "cancel_calendar_event",
+            "search_calendar_events",
+            "update_calendar_event",
+        ]:
             tool_args["agent_id"] = conversation.agent_id
 
         # Create tool call record
@@ -260,19 +271,26 @@ async def execute_tenant_tool(
             conversation_id=conversation.id,
             tool_name=tool_name,
             parameters=tool_args,
-            status="started"
+            status="started",
         )
         db_session.add(tool_call)
         db_session.commit()
 
         # Execute the tool using the registry
-        result = await global_registry.execute_tool(tool_name, tool_args, conversation.id)
+        result = await global_registry.execute_tool(
+            tool_name, tool_args, conversation.id
+        )
 
         if isinstance(result, dict) and result.get("action") == "hangup":
             result["_trigger_close"] = True
 
         execution_time = time.time() - start_time
-        logger.info("Function %s executed in %.3fs. Result: %s", tool_name, execution_time, result)
+        logger.info(
+            "Function %s executed in %.3fs. Result: %s",
+            tool_name,
+            execution_time,
+            result,
+        )
 
         tool_call.result = result
         tool_call.status = "completed"
@@ -293,7 +311,7 @@ async def execute_tenant_tool(
 
 
 async def handle_function_call_request(
-        message_json: dict, deepgram_ws, conversation: Conversation, db_session: Session
+    message_json: dict, deepgram_ws, conversation: Conversation, db_session: Session
 ):
     """Handle FunctionCallRequest messages from Deepgram."""
     function_call_id = None
@@ -315,13 +333,15 @@ async def handle_function_call_request(
             logger.error("Failed to parse function arguments: %s", arguments_str)
             parameters = {}
 
-        result = await execute_tenant_tool(function_name, parameters, conversation, db_session)
+        result = await execute_tenant_tool(
+            function_name, parameters, conversation, db_session
+        )
 
         response_message = {
             "type": "FunctionCallResponse",
             "id": function_call_id,
             "name": function_name,
-            "content": json.dumps(result) if isinstance(result, dict) else str(result)
+            "content": json.dumps(result) if isinstance(result, dict) else str(result),
         }
         await deepgram_ws.send(json.dumps(response_message))
 
@@ -336,7 +356,7 @@ async def handle_function_call_request(
                 "type": "FunctionCallResponse",
                 "id": function_call_id,
                 "name": function_name or "unknown",
-                "content": json.dumps({"success": False, "error": str(e)})
+                "content": json.dumps({"success": False, "error": str(e)}),
             }
             try:
                 await deepgram_ws.send(json.dumps(error_response))
@@ -345,15 +365,17 @@ async def handle_function_call_request(
 
 
 async def handle_conversation_text(
-        message_json: dict,
-        conversation: Conversation,
-        db_session: Session,
-        user_audio_buffer: Optional[List[bytes]] = None,
-        agent_audio_buffer: Optional[List[bytes]] = None,
+    message_json: dict,
+    conversation: Conversation,
+    db_session: Session,
+    user_audio_buffer: Optional[List[bytes]] = None,
+    agent_audio_buffer: Optional[List[bytes]] = None,
 ):
     """Handle ConversationText messages from Deepgram and persist them."""
 
-    async def persist_audio_for_message(conv_id: str, msg_id: str, role: str, chunks: list[bytes]):
+    async def persist_audio_for_message(
+        conv_id: str, msg_id: str, role: str, chunks: list[bytes]
+    ):
         try:
             if not chunks:
                 return
@@ -362,14 +384,12 @@ async def handle_conversation_text(
                 audio_chunks=chunks,
                 conversation_id=conv_id,
                 message_id=msg_id,
-                role=role
+                role=role,
             )
 
             # Update message with audio path
             message_model = (
-                db_session.query(Message)
-                .filter(Message.id == msg_id)
-                .first()
+                db_session.query(Message).filter(Message.id == msg_id).first()
             )
             if message_model:
                 message_model.audio_file_path = path
@@ -388,10 +408,10 @@ async def handle_conversation_text(
 
         # Get the next sequence number for this conversation
         max_sequence = (
-                           db_session.query(func.max(Message.sequence_number))
-                           .filter(Message.conversation_id == conversation.id)
-                           .scalar()
-                       ) or 0
+            db_session.query(func.max(Message.sequence_number))
+            .filter(Message.conversation_id == conversation.id)
+            .scalar()
+        ) or 0
 
         # Create new message directly
         message = Message(
@@ -402,7 +422,7 @@ async def handle_conversation_text(
             sequence_number=max_sequence + 1,
             message_type="conversation",
             created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            updated_at=datetime.now(timezone.utc),
         )
 
         db_session.add(message)
@@ -412,11 +432,15 @@ async def handle_conversation_text(
         if role == "user" and user_audio_buffer:
             chunks = list(user_audio_buffer)
             user_audio_buffer.clear()
-            asyncio.create_task(persist_audio_for_message(conversation.id, message.id, role, chunks))
+            asyncio.create_task(
+                persist_audio_for_message(conversation.id, message.id, role, chunks)
+            )
         elif role == "assistant" and agent_audio_buffer:
             chunks = list(agent_audio_buffer)
             agent_audio_buffer.clear()
-            asyncio.create_task(persist_audio_for_message(conversation.id, message.id, role, chunks))
+            asyncio.create_task(
+                persist_audio_for_message(conversation.id, message.id, role, chunks)
+            )
 
     except Exception as e:
         logger.exception("Error handling ConversationText: %s", e)

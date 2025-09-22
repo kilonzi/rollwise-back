@@ -5,6 +5,7 @@ from datetime import datetime
 
 class StatisticValue(BaseModel):
     """A statistic value with comparison to previous period"""
+
     current: int
     previous: int
     change: int
@@ -13,6 +14,7 @@ class StatisticValue(BaseModel):
 
 class MinutesStatistic(BaseModel):
     """Duration statistics in minutes with comparison"""
+
     current: float
     previous: float
     change: float
@@ -21,6 +23,7 @@ class MinutesStatistic(BaseModel):
 
 class ConversationStats(BaseModel):
     """Conversation statistics by type"""
+
     all: StatisticValue
     voice: StatisticValue
     messages: StatisticValue
@@ -28,12 +31,14 @@ class ConversationStats(BaseModel):
 
 class DurationStats(BaseModel):
     """Duration statistics by type (in minutes)"""
+
     all: MinutesStatistic
     voice: MinutesStatistic
 
 
 class CallerStats(BaseModel):
     """Unique caller statistics"""
+
     unique_callers: StatisticValue
     returning_callers: StatisticValue
     new_callers: StatisticValue
@@ -41,6 +46,7 @@ class CallerStats(BaseModel):
 
 class DateRangeInfo(BaseModel):
     """Information about the date ranges"""
+
     current_start: datetime
     current_end: datetime
     previous_start: datetime
@@ -50,6 +56,7 @@ class DateRangeInfo(BaseModel):
 
 class AgentStatistics(BaseModel):
     """Complete agent statistics response"""
+
     agent_id: str
     date_range: DateRangeInfo
     conversations: ConversationStats

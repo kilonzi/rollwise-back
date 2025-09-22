@@ -11,7 +11,7 @@ from .database import (
     Collection,
     MenuItem,
     get_db,
-    create_tables
+    create_tables,
 )
 
 __all__ = [
@@ -27,5 +27,5 @@ __all__ = [
     "OrderItem",
     "MenuItem",
     "get_db",
-    "create_tables"
+    "create_tables",
 ]

@@ -20,19 +20,26 @@ class VertexAIClient:
                 if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
                     # For local development with a service account
                     cls._instance.model = GenerativeModel("gemini-1.5-flash")
-                    logger.info("✅ Vertex AI client initialized successfully using service account.")
+                    logger.info(
+                        "✅ Vertex AI client initialized successfully using service account."
+                    )
                 else:
                     # For environments with Application Default Credentials (ADC)
                     # This will work in Cloud Run, Cloud Functions, etc.
                     import vertexai
+
                     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
                     location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
                     if project_id:
                         vertexai.init(project=project_id, location=location)
                         cls._instance.model = GenerativeModel("gemini-1.5-flash")
-                        logger.info(f"✅ Vertex AI client initialized for project {project_id} in {location}.")
+                        logger.info(
+                            f"✅ Vertex AI client initialized for project {project_id} in {location}."
+                        )
                     else:
-                        logger.warning("⚠️ GOOGLE_CLOUD_PROJECT not set. Vertex AI client not initialized.")
+                        logger.warning(
+                            "⚠️ GOOGLE_CLOUD_PROJECT not set. Vertex AI client not initialized."
+                        )
 
             except exceptions.DefaultCredentialsError:
                 logger.warning(
@@ -54,4 +61,3 @@ def get_vertex_ai_client() -> VertexAIClient:
     Provides a singleton instance of the VertexAIClient.
     """
     return VertexAIClient()
-

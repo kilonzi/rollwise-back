@@ -8,26 +8,22 @@ between Twilio and Deepgram for voice-based AI agent conversations.
 import asyncio
 import base64
 import json
-import time
-import uuid
-from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
 from enum import Enum
+from typing import Optional, List, Dict, Any
 
 from fastapi import WebSocket
 from sqlalchemy.orm import Session
 
-from app.models import Agent, Conversation, Message
+from app.models import Agent, Conversation
 from app.services.agent_service import AgentService
-from app.services.audio_service import AudioService
 from app.services.conversation_service import ConversationService
 from app.services.deepgram_service import DeepgramService
-from app.services.order_service import OrderService
 from app.utils.logging_config import app_logger as logger
 
 
 class SessionState(Enum):
     """WebSocket session states for tracking lifecycle"""
+
     INITIALIZING = "initializing"
     CONNECTING = "connecting"
     ACTIVE = "active"
@@ -39,7 +35,13 @@ class SessionState(Enum):
 class WebSocketSession:
     """Manages the complete WebSocket session lifecycle"""
 
-    def __init__(self, websocket: WebSocket, agent_id: str, conversation_id: str, db_session: Session):
+    def __init__(
+        self,
+        websocket: WebSocket,
+        agent_id: str,
+        conversation_id: str,
+        db_session: Session,
+    ):
         self.websocket = websocket
         self.agent_id = agent_id
         self.conversation_id = conversation_id
@@ -64,7 +66,9 @@ class WebSocketSession:
         self.tasks: List[asyncio.Task] = []
         self.cleanup_completed = False
 
-        logger.info(f"[SESSION] Initialized for agent {agent_id}, conversation {conversation_id}")
+        logger.info(
+            f"[SESSION] Initialized for agent {agent_id}, conversation {conversation_id}"
+        )
 
     async def setup(self) -> bool:
         """Setup and validate all session components"""
@@ -78,10 +82,14 @@ class WebSocketSession:
                 await self.websocket.close(code=1008, reason="Business not available")
                 return False
 
-            logger.info(f"[SESSION] Agent validated: {self.agent.name} ({self.agent.id})")
+            logger.info(
+                f"[SESSION] Agent validated: {self.agent.name} ({self.agent.id})"
+            )
 
             # 2. Validate conversation
-            self.conversation = self.conversation_service.get_conversation(self.conversation_id)
+            self.conversation = self.conversation_service.get_conversation(
+                self.conversation_id
+            )
             if not self.conversation:
                 logger.error(f"[SESSION] Conversation {self.conversation_id} not found")
                 await self.websocket.close(code=1011, reason="Conversation not found")
@@ -93,20 +101,26 @@ class WebSocketSession:
             self.agent_config = self.agent_service.build_agent_config(
                 agent=self.agent,
                 phone_number=self.conversation.caller_phone,
-                conversation_id=self.conversation.id
+                conversation_id=self.conversation.id,
             )
 
             if not self.agent_config:
                 logger.error("[SESSION] Failed to build agent configuration")
-                await self.websocket.close(code=1011, reason="Agent configuration error")
+                await self.websocket.close(
+                    code=1011, reason="Agent configuration error"
+                )
                 return False
 
-            function_count = len(self.agent_config.get('agent', {}).get('think', {}).get('functions', []))
+            function_count = len(
+                self.agent_config.get("agent", {}).get("think", {}).get("functions", [])
+            )
             logger.info(f"[SESSION] Built agent config with {function_count} functions")
 
             # 4. Initialize components
             self.audio_processor = AudioProcessor()
-            self.deepgram_handler = DeepgramHandler(self.agent_config, self.conversation, self.db_session)
+            self.deepgram_handler = DeepgramHandler(
+                self.agent_config, self.conversation, self.db_session
+            )
             self.twilio_handler = TwilioHandler(self.websocket, self.audio_processor)
 
             self.state = SessionState.CONNECTING
@@ -133,9 +147,15 @@ class WebSocketSession:
 
             # Start all processing tasks
             self.tasks = [
-                asyncio.create_task(self.deepgram_handler.receive_messages(self.audio_processor)),
+                asyncio.create_task(
+                    self.deepgram_handler.receive_messages(self.audio_processor)
+                ),
                 asyncio.create_task(self.twilio_handler.handle_twilio_messages()),
-                asyncio.create_task(self.audio_processor.send_audio_to_deepgram(self.deepgram_handler.deepgram_ws)),
+                asyncio.create_task(
+                    self.audio_processor.send_audio_to_deepgram(
+                        self.deepgram_handler.deepgram_ws
+                    )
+                ),
             ]
 
             self.state = SessionState.ACTIVE
@@ -187,7 +207,9 @@ class WebSocketSession:
 
         # Close WebSocket
         try:
-            if not self.websocket.client_state.DISCONNECTED:
+            if hasattr(self.websocket, "client_state") and not getattr(
+                self.websocket.client_state, "DISCONNECTED", False
+            ):
                 await self.websocket.close()
                 logger.info("[SESSION] WebSocket closed")
         except Exception as ws_error:
@@ -246,15 +268,23 @@ class AudioProcessor:
                     # Check connection state before sending with detailed logging
                     try:
                         current_state = deepgram_ws.state.name
-                        if current_state in ['CLOSED', 'CLOSING']:
-                            close_code = getattr(deepgram_ws, 'close_code', 'unknown')
-                            close_reason = getattr(deepgram_ws, 'close_reason', 'unknown')
-                            logger.warning(f"[AUDIO] Deepgram connection {current_state} - Code: {close_code}, Reason: {close_reason}")
+                        if current_state in ["CLOSED", "CLOSING"]:
+                            close_code = getattr(deepgram_ws, "close_code", "unknown")
+                            close_reason = getattr(
+                                deepgram_ws, "close_reason", "unknown"
+                            )
+                            logger.warning(
+                                f"[AUDIO] Deepgram connection {current_state} - Code: {close_code}, Reason: {close_reason}"
+                            )
                             break
                         else:
-                            logger.debug(f"[AUDIO] Connection state OK: {current_state}")
+                            logger.debug(
+                                f"[AUDIO] Connection state OK: {current_state}"
+                            )
                     except AttributeError as attr_error:
-                        logger.debug(f"[AUDIO] Could not check connection state: {attr_error}")
+                        logger.debug(
+                            f"[AUDIO] Could not check connection state: {attr_error}"
+                        )
                         pass
 
                     await deepgram_ws.send(audio_chunk)
@@ -288,7 +318,12 @@ class AudioProcessor:
 class DeepgramHandler:
     """Handles Deepgram WebSocket connection and message processing"""
 
-    def __init__(self, agent_config: Dict[str, Any], conversation: Conversation, db_session: Session):
+    def __init__(
+        self,
+        agent_config: Dict[str, Any],
+        conversation: Conversation,
+        db_session: Session,
+    ):
         self.agent_config = agent_config
         self.conversation = conversation
         self.db_session = db_session
@@ -306,27 +341,37 @@ class DeepgramHandler:
             logger.info("[DEEPGRAM] Connecting to Deepgram Agent API")
 
             # Print the agent config being sent for debugging
-            logger.info(f"[DEEPGRAM] Agent config: {json.dumps(self.agent_config, indent=2)}")
+            logger.info(
+                f"[DEEPGRAM] Agent config: {json.dumps(self.agent_config, indent=2)}"
+            )
 
             # Don't use context manager here - we need to keep the connection open
             self.connection_manager = self.deepgram_service.connect()
             self.deepgram_ws = await self.connection_manager.__aenter__()
 
-            logger.info(f"[DEEPGRAM] Connected to Deepgram - Connection state: {self.deepgram_ws.state}")
-            logger.info(f"[DEEPGRAM] Connection details - ID: {getattr(self.deepgram_ws, 'id', 'N/A')}")
+            logger.info(
+                f"[DEEPGRAM] Connected to Deepgram - Connection state: {self.deepgram_ws.state}"
+            )
+            logger.info(
+                f"[DEEPGRAM] Connection details - ID: {getattr(self.deepgram_ws, 'id', 'N/A')}"
+            )
 
             # Send configuration and wait for processing
             await self.deepgram_service.send_config(self.deepgram_ws)
             logger.info("[DEEPGRAM] Configuration sent successfully")
 
             # Check connection state after config
-            logger.info(f"[DEEPGRAM] Connection state after config: {self.deepgram_ws.state}")
+            logger.info(
+                f"[DEEPGRAM] Connection state after config: {self.deepgram_ws.state}"
+            )
 
             # Wait for Deepgram to process the configuration
             await asyncio.sleep(0.5)
 
             # Check connection state after wait
-            logger.info(f"[DEEPGRAM] Connection state after wait: {self.deepgram_ws.state}")
+            logger.info(
+                f"[DEEPGRAM] Connection state after wait: {self.deepgram_ws.state}"
+            )
 
             self.is_connected = True
             return True
@@ -354,7 +399,9 @@ class DeepgramHandler:
                         await self._handle_audio_message(message, audio_processor)
 
                 except Exception as msg_error:
-                    logger.exception(f"[DEEPGRAM] Error processing message: {msg_error}")
+                    logger.exception(
+                        f"[DEEPGRAM] Error processing message: {msg_error}"
+                    )
                     continue
 
         except asyncio.CancelledError:
@@ -364,9 +411,13 @@ class DeepgramHandler:
             if e.code == 1000:
                 logger.info("[DEEPGRAM] Connection closed normally (hangup)")
             elif e.code == 1006:
-                logger.info("[DEEPGRAM] Connection closed by hangup function - this is expected")
+                logger.info(
+                    "[DEEPGRAM] Connection closed by hangup function - this is expected"
+                )
             else:
-                logger.warning(f"[DEEPGRAM] Connection closed unexpectedly: {e.code} - {e.reason}")
+                logger.warning(
+                    f"[DEEPGRAM] Connection closed unexpectedly: {e.code} - {e.reason}"
+                )
         except Exception as e:
             logger.exception(f"[DEEPGRAM] Message receiver error: {e}")
         finally:
@@ -392,7 +443,9 @@ class DeepgramHandler:
         except Exception as e:
             logger.exception(f"[DEEPGRAM] Error handling text message: {e}")
 
-    async def _handle_audio_message(self, message: bytes, audio_processor: AudioProcessor):
+    async def _handle_audio_message(
+        self, message: bytes, audio_processor: AudioProcessor
+    ):
         """Handle audio messages from Deepgram"""
         try:
             # This is agent speech audio - we need to send it back to Twilio
@@ -404,7 +457,9 @@ class DeepgramHandler:
                 await self.twilio_handler.send_audio_to_twilio(message)
                 logger.debug(f"[DEEPGRAM] Sent {len(message)} bytes to Twilio")
             else:
-                logger.warning("[DEEPGRAM] No TwilioHandler available for audio routing")
+                logger.warning(
+                    "[DEEPGRAM] No TwilioHandler available for audio routing"
+                )
 
         except Exception as e:
             logger.exception(f"[DEEPGRAM] Error handling audio message: {e}")
@@ -415,8 +470,11 @@ class DeepgramHandler:
         from app.api.routers.communication import handle_conversation_text
 
         await handle_conversation_text(
-            data, self.conversation, self.db_session,
-            [], []  # Audio buffers will be handled separately
+            data,
+            self.conversation,
+            self.db_session,
+            [],
+            [],  # Audio buffers will be handled separately
         )
 
     async def _handle_function_call_request(self, data: Dict[str, Any]):
@@ -526,24 +584,74 @@ class TwilioHandler:
         await self.audio_processor.stop_audio_sender()
 
     async def send_audio_to_twilio(self, audio_data: bytes):
-        """Send audio back to Twilio"""
+        """Send audio back to Twilio with proper connection state checking"""
         try:
+            # Check if handler is still running and websocket is available
+            if not self.is_running:
+                logger.debug("[TWILIO] Handler stopped, skipping audio send")
+                return
+
+            # Check websocket connection state using the client_state attribute
+            # In older FastAPI versions, client_state is an integer or enum value
+            try:
+                # Try to access client_state - if it fails, websocket is likely closed
+                client_state = getattr(self.websocket, "client_state", None)
+                if client_state is None:
+                    logger.debug(
+                        "[TWILIO] WebSocket client_state not available, skipping audio send"
+                    )
+                    return
+
+                # Check if websocket is in a disconnected state
+                # Different FastAPI versions use different representations
+                if hasattr(client_state, "name"):
+                    state_name = client_state.name
+                    if state_name in ["DISCONNECTED", "CLOSED"]:
+                        logger.debug(
+                            f"[TWILIO] WebSocket {state_name}, skipping audio send"
+                        )
+                        return
+                elif str(client_state) in ["3", "DISCONNECTED", "CLOSED"]:
+                    logger.debug(
+                        f"[TWILIO] WebSocket disconnected ({client_state}), skipping audio send"
+                    )
+                    return
+
+            except AttributeError:
+                # If we can't check state, try to send anyway and handle errors
+                logger.debug(
+                    "[TWILIO] Could not check WebSocket state, attempting send"
+                )
+
             stream_sid = await self.audio_processor.get_stream_sid()
-            audio_b64 = base64.b64encode(audio_data).decode('utf-8')
+            audio_b64 = base64.b64encode(audio_data).decode("utf-8")
 
             media_message = {
                 "event": "media",
                 "streamSid": stream_sid,
-                "media": {
-                    "payload": audio_b64
-                }
+                "media": {"payload": audio_b64},
             }
 
             self.audio_processor.put_stream_sid_back(stream_sid)
-            await self.websocket.send_text(json.dumps(media_message))
 
+            # Send with additional error handling for closed connections
+            await self.websocket.send_text(json.dumps(media_message))
+            logger.debug(f"[TWILIO] Successfully sent {len(audio_data)} bytes of audio")
+
+        except RuntimeError as e:
+            if "close message has been sent" in str(e):
+                logger.info(
+                    "[TWILIO] WebSocket closed by client/server, stopping audio transmission"
+                )
+                self.is_running = False  # Stop the handler to prevent further attempts
+            else:
+                logger.warning(f"[TWILIO] Runtime error sending audio: {e}")
+        except ConnectionResetError:
+            logger.info("[TWILIO] Connection reset by peer, call ended")
+            self.is_running = False
         except Exception as e:
-            logger.exception(f"[TWILIO] Error sending audio: {e}")
+            logger.error(f"[TWILIO] Error sending audio: {e}")
+            # Don't stop on other errors, just log them
 
     async def cleanup(self):
         """Clean up Twilio handler"""

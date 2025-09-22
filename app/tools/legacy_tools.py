@@ -1,6 +1,7 @@
 """
 Legacy agent functions converted to the new tools registry system.
 """
+
 from typing import Dict, Any
 
 from app.models.database import get_db_session
@@ -15,13 +16,26 @@ from app.utils.logging_config import app_logger
     parameters={
         "type": "object",
         "properties": {
-            "agent_id": {"type": "string", "description": "ID of the agent (automatically injected)"},
-            "collection_name": {"type": "string", "description": "Name of the collection to search (e.g., 'restaurant_menu', 'delivery_policies')"},
-            "query": {"type": "string", "description": "What you're looking for in natural language"},
-            "limit": {"type": "integer", "description": "Maximum number of results to return (default 10, max 50)", "default": 10}
+            "agent_id": {
+                "type": "string",
+                "description": "ID of the agent (automatically injected)",
+            },
+            "collection_name": {
+                "type": "string",
+                "description": "Name of the collection to search (e.g., 'restaurant_menu', 'delivery_policies')",
+            },
+            "query": {
+                "type": "string",
+                "description": "What you're looking for in natural language",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of results to return (default 10, max 50)",
+                "default": 10,
+            },
         },
-        "required": ["agent_id", "collection_name", "query"]
-    }
+        "required": ["agent_id", "collection_name", "query"],
+    },
 )
 async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -40,7 +54,7 @@ async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
         if not agent_id or not collection_name or not query:
             return {
                 "success": False,
-                "error": "Missing required parameters: agent_id, collection_name, or query"
+                "error": "Missing required parameters: agent_id, collection_name, or query",
             }
 
         db_session = get_db_session()
@@ -50,27 +64,35 @@ async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
                 agent_id=agent_id,
                 collection_name=collection_name,
                 query=query,
-                limit=min(limit, 50)  # Cap at 50 as specified
+                limit=min(limit, 50),  # Cap at 50 as specified
             )
 
             if result["success"] and result.get("results"):
                 # Format results for agent consumption
                 formatted_results = []
                 for item in result["results"]:
-                    formatted_results.append({
-                        "content": item["text"],
-                        "relevance_score": item.get("relevance_score", 0),
-                        "source_section": item.get("metadata", {}).get("source_section", ""),
-                        "content_type": item.get("metadata", {}).get("content_type", ""),
-                        "chunk_index": item.get("metadata", {}).get("chunk_index", 0)
-                    })
+                    formatted_results.append(
+                        {
+                            "content": item["text"],
+                            "relevance_score": item.get("relevance_score", 0),
+                            "source_section": item.get("metadata", {}).get(
+                                "source_section", ""
+                            ),
+                            "content_type": item.get("metadata", {}).get(
+                                "content_type", ""
+                            ),
+                            "chunk_index": item.get("metadata", {}).get(
+                                "chunk_index", 0
+                            ),
+                        }
+                    )
 
                 return {
                     "success": True,
                     "collection_name": collection_name,
                     "data": formatted_results,
                     "count": len(formatted_results),
-                    "message": f"Found {len(formatted_results)} relevant results in '{collection_name}' collection"
+                    "message": f"Found {len(formatted_results)} relevant results in '{collection_name}' collection",
                 }
             else:
                 error_msg = result.get("error", "No results found")
@@ -79,7 +101,7 @@ async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
                     "collection_name": collection_name,
                     "data": [],
                     "count": 0,
-                    "message": f"No results found in '{collection_name}': {error_msg}"
+                    "message": f"No results found in '{collection_name}': {error_msg}",
                 }
         finally:
             db_session.close()
@@ -92,7 +114,7 @@ async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
             "data": [],
             "count": 0,
             "error": str(e),
-            "message": f"Error searching collection '{collection_name}': {str(e)}"
+            "message": f"Error searching collection '{collection_name}': {str(e)}",
         }
 
 
@@ -102,10 +124,14 @@ async def search_collection_tool(args: Dict[str, Any]) -> Dict[str, Any]:
     parameters={
         "type": "object",
         "properties": {
-            "reason": {"type": "string", "description": "Brief reason for hanging up (e.g., 'conversation_complete', 'user_inactive', 'user_goodbye')", "default": "conversation_complete"}
+            "reason": {
+                "type": "string",
+                "description": "Brief reason for hanging up (e.g., 'conversation_complete', 'user_inactive', 'user_goodbye')",
+                "default": "conversation_complete",
+            }
         },
-        "required": []
-    }
+        "required": [],
+    },
 )
 async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -123,23 +149,20 @@ async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
         "success": True,
         "action": "hangup",
         "reason": reason,
-        "message": f"Ending conversation: {reason}"
+        "message": f"Ending conversation: {reason}",
     }
 
 
 # Register all legacy tools with the global registry
 def register_legacy_tools():
     """Register all legacy agent functions with the global registry"""
-    tools_to_register = [
-        search_collection_tool,
-        hangup_function
-    ]
+    tools_to_register = [search_collection_tool, hangup_function]
 
     for tool_func in tools_to_register:
         global_registry.register(
             name=tool_func._tool_name,
             description=tool_func._tool_description,
-            parameters=tool_func._tool_parameters
+            parameters=tool_func._tool_parameters,
         )(tool_func)
 
     app_logger.info(f"Registered {len(tools_to_register)} legacy tools")

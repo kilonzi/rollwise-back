@@ -38,16 +38,22 @@ class CollectionService:
     def chroma_client(self):
         """Lazy initialization of ChromaDB client, configured for ChromaDB Cloud."""
         if self._chroma_client is None:
-            if settings.CHROMA_API_KEY and settings.CHROMA_TENANT and settings.CHROMA_DATABASE:
+            if (
+                settings.CHROMA_API_KEY
+                and settings.CHROMA_TENANT
+                and settings.CHROMA_DATABASE
+            ):
                 logger.info("Connecting to ChromaDB Cloud...")
                 self._chroma_client = chromadb.CloudClient(
                     api_key=settings.CHROMA_API_KEY,
                     tenant=settings.CHROMA_TENANT,
-                    database=settings.CHROMA_DATABASE
+                    database=settings.CHROMA_DATABASE,
                 )
                 logger.info("Successfully connected to ChromaDB Cloud.")
             else:
-                logger.warning("ChromaDB Cloud settings not found, falling back to local ChromaDB.")
+                logger.warning(
+                    "ChromaDB Cloud settings not found, falling back to local ChromaDB."
+                )
                 chroma_path = os.path.join("store", "chroma")
                 os.makedirs(chroma_path, exist_ok=True)
                 self._chroma_client = chromadb.PersistentClient(path=chroma_path)
@@ -56,20 +62,17 @@ class CollectionService:
     def slugify_name(self, name: str) -> str:
         """Convert name to slugified format with underscores"""
         # Convert to lowercase and replace spaces with underscores
-        slug = re.sub(r'[^\w\s-]', '', name.lower())
-        slug = re.sub(r'[-\s]+', '_', slug)
+        slug = re.sub(r"[^\w\s-]", "", name.lower())
+        slug = re.sub(r"[-\s]+", "_", slug)
         # Remove leading/trailing underscores
-        slug = slug.strip('_')
+        slug = slug.strip("_")
         # Ensure it's not empty
         if not slug:
             slug = "collection"
         return slug
 
     def chunk_text(
-        self,
-        text: str,
-        chunk_size: int = 1000,
-        overlap: int = 200
+        self, text: str, chunk_size: int = 1000, overlap: int = 200
     ) -> List[Dict[str, Any]]:
         """
         Chunk text using sliding window approach with overlap.
@@ -89,14 +92,16 @@ class CollectionService:
         while start < len(text):
             end = min(start + chunk_size, len(text))
             chunk = text[start:end]
-            chunks.append({
-                "chunk_index": idx,
-                "text": chunk,
-                "char_count": len(chunk),
-                "start_char": start,
-                "end_char": end,
-                "word_count": len(chunk.split())
-            })
+            chunks.append(
+                {
+                    "chunk_index": idx,
+                    "text": chunk,
+                    "char_count": len(chunk),
+                    "start_char": start,
+                    "end_char": end,
+                    "word_count": len(chunk.split()),
+                }
+            )
             start += chunk_size - overlap
             idx += 1
 
@@ -114,9 +119,10 @@ class CollectionService:
         """
         try:
             import csv
+
             chunks = []
 
-            with open(file_path, 'r', encoding='utf-8') as file:
+            with open(file_path, "r", encoding="utf-8") as file:
                 # Try to detect dialect
                 sample = file.read(1024)
                 file.seek(0)
@@ -135,15 +141,17 @@ class CollectionService:
 
                     if row_parts:
                         row_text = ", ".join(row_parts)
-                        chunks.append({
-                            "chunk_index": idx,
-                            "text": row_text,
-                            "char_count": len(row_text),
-                            "word_count": len(row_text.split()),
-                            "row_number": idx + 1,
-                            "headers": headers,
-                            "raw_data": dict(row)
-                        })
+                        chunks.append(
+                            {
+                                "chunk_index": idx,
+                                "text": row_text,
+                                "char_count": len(row_text),
+                                "word_count": len(row_text.split()),
+                                "row_number": idx + 1,
+                                "headers": headers,
+                                "raw_data": dict(row),
+                            }
+                        )
 
             return chunks
 
@@ -155,40 +163,70 @@ class CollectionService:
         text_lower = text.lower()
 
         # Check for menu indicators
-        menu_keywords = ['menu', 'price', 'dish', 'appetizer', 'entree', 'dessert', 'beverage',
-                        'lunch', 'dinner', 'special', 'combo', '$', 'cuisine']
+        menu_keywords = [
+            "menu",
+            "price",
+            "dish",
+            "appetizer",
+            "entree",
+            "dessert",
+            "beverage",
+            "lunch",
+            "dinner",
+            "special",
+            "combo",
+            "$",
+            "cuisine",
+        ]
         if any(keyword in text_lower for keyword in menu_keywords):
             return "menu"
 
         # Check for policy indicators
-        policy_keywords = ['policy', 'rule', 'regulation', 'procedure', 'guideline',
-                          'terms', 'condition', 'agreement', 'compliance']
+        policy_keywords = [
+            "policy",
+            "rule",
+            "regulation",
+            "procedure",
+            "guideline",
+            "terms",
+            "condition",
+            "agreement",
+            "compliance",
+        ]
         if any(keyword in text_lower for keyword in policy_keywords):
             return "policy"
 
         # Check for FAQ indicators
-        faq_keywords = ['faq', 'frequently asked', 'question', 'answer', 'q:', 'a:']
+        faq_keywords = ["faq", "frequently asked", "question", "answer", "q:", "a:"]
         if any(keyword in text_lower for keyword in faq_keywords):
             return "faq"
 
         # Check for contact/hours indicators
-        contact_keywords = ['hours', 'contact', 'phone', 'address', 'location', 'open', 'closed']
+        contact_keywords = [
+            "hours",
+            "contact",
+            "phone",
+            "address",
+            "location",
+            "open",
+            "closed",
+        ]
         if any(keyword in text_lower for keyword in contact_keywords):
             return "contact_info"
 
         # Check for client/customer data
-        client_keywords = ['client', 'customer', 'name', 'email', 'phone']
+        client_keywords = ["client", "customer", "name", "email", "phone"]
         if any(keyword in text_lower for keyword in client_keywords):
             return "client_data"
 
         # Default based on filename
         if filename:
             filename_lower = filename.lower()
-            if any(keyword in filename_lower for keyword in ['menu', 'price']):
+            if any(keyword in filename_lower for keyword in ["menu", "price"]):
                 return "menu"
-            elif any(keyword in filename_lower for keyword in ['policy', 'rule']):
+            elif any(keyword in filename_lower for keyword in ["policy", "rule"]):
                 return "policy"
-            elif any(keyword in filename_lower for keyword in ['faq', 'help']):
+            elif any(keyword in filename_lower for keyword in ["faq", "help"]):
                 return "faq"
 
         return "general"
@@ -208,7 +246,9 @@ class CollectionService:
             return "\n\n".join(text_content)
 
         except ImportError:
-            raise Exception("pdfplumber not installed. Install with: pip install pdfplumber")
+            raise Exception(
+                "pdfplumber not installed. Install with: pip install pdfplumber"
+            )
         except Exception as e:
             raise Exception(f"Error processing PDF: {str(e)}")
 
@@ -217,7 +257,7 @@ class CollectionService:
         try:
             import csv
 
-            with open(file_path, 'r', encoding='utf-8') as file:
+            with open(file_path, "r", encoding="utf-8") as file:
                 # Try to detect dialect
                 sample = file.read(1024)
                 file.seek(0)
@@ -232,7 +272,9 @@ class CollectionService:
 
             # Convert to natural language
             headers = list(rows[0].keys())
-            text_parts = [f"Data contains {len(rows)} records with columns: {', '.join(headers)}\n"]
+            text_parts = [
+                f"Data contains {len(rows)} records with columns: {', '.join(headers)}\n"
+            ]
 
             # Add sample data in natural language
             for i, row in enumerate(rows[:10]):  # First 10 rows as examples
@@ -241,7 +283,7 @@ class CollectionService:
                     if value and value.strip():
                         row_desc.append(f"{key}: {value}")
                 if row_desc:
-                    text_parts.append(f"Record {i+1}: {', '.join(row_desc)}")
+                    text_parts.append(f"Record {i + 1}: {', '.join(row_desc)}")
 
             if len(rows) > 10:
                 text_parts.append(f"\n... and {len(rows) - 10} more records")
@@ -255,11 +297,11 @@ class CollectionService:
         """Read and clean text file"""
         try:
             # Try different encodings
-            encodings = ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']
+            encodings = ["utf-8", "utf-8-sig", "latin1", "cp1252"]
 
             for encoding in encodings:
                 try:
-                    with open(file_path, 'r', encoding=encoding) as file:
+                    with open(file_path, "r", encoding=encoding) as file:
                         return file.read()
                 except UnicodeDecodeError:
                     continue
@@ -277,7 +319,7 @@ class CollectionService:
         notes: str = "",
         file_path: str = None,
         text_content: str = None,
-        file_type: str = None
+        file_type: str = None,
     ) -> Collection:
         """
         Create a new collection with document processing.
@@ -307,7 +349,9 @@ class CollectionService:
             # Ensure unique name for this agent
             existing = (
                 self.db_session.query(Collection)
-                .filter(Collection.agent_id == agent_id, Collection.name == slugified_name)
+                .filter(
+                    Collection.agent_id == agent_id, Collection.name == slugified_name
+                )
                 .first()
             )
             if existing:
@@ -317,7 +361,9 @@ class CollectionService:
                     new_name = f"{slugified_name}_{counter}"
                     existing = (
                         self.db_session.query(Collection)
-                        .filter(Collection.agent_id == agent_id, Collection.name == new_name)
+                        .filter(
+                            Collection.agent_id == agent_id, Collection.name == new_name
+                        )
                         .first()
                     )
                     counter += 1
@@ -337,7 +383,7 @@ class CollectionService:
                 file_path=file_path,
                 file_type=file_type or "text",
                 chroma_collection_name=chroma_collection_name,
-                status="processing"
+                status="processing",
             )
 
             self.db_session.add(collection)
@@ -345,7 +391,9 @@ class CollectionService:
 
             # Process content asynchronously
             try:
-                await self._process_collection_content(collection, file_path, text_content)
+                await self._process_collection_content(
+                    collection, file_path, text_content
+                )
                 collection.status = "ready"
             except Exception as e:
                 collection.status = "error"
@@ -359,15 +407,16 @@ class CollectionService:
             raise Exception(f"Error creating collection: {str(e)}")
 
     async def _process_collection_content(
-        self,
-        collection: Collection,
-        file_path: str = None,
-        text_content: str = None
+        self, collection: Collection, file_path: str = None, text_content: str = None
     ):
         """Process and store collection content in ChromaDB"""
         try:
             # Handle CSV files differently - chunk directly from file
-            if collection.file_type == "csv" and file_path and os.path.exists(file_path):
+            if (
+                collection.file_type == "csv"
+                and file_path
+                and os.path.exists(file_path)
+            ):
                 chunks = self.chunk_csv_content(file_path)
                 # For CSV, we don't need to extract text content first
                 content = None
@@ -398,7 +447,9 @@ class CollectionService:
                 content_type = self.detect_content_type(content, filename)
             else:
                 # For CSV files, set content type based on filename or default
-                content_type = self.detect_content_type("", filename) if filename else "data"
+                content_type = (
+                    self.detect_content_type("", filename) if filename else "data"
+                )
             collection.content_type = content_type
 
             # Create ChromaDB collection
@@ -415,26 +466,26 @@ class CollectionService:
                 doc_id = f"{collection.id}_chunk_{chunk['chunk_index']}"
 
                 documents.append(chunk["text"])
-                metadatas.append({
-                    "collection_id": collection.id,
-                    "agent_id": collection.agent_id,
-                    "chunk_index": chunk["chunk_index"],
-                    "content_type": content_type,
-                    "char_count": chunk.get("char_count", 0),
-                    "word_count": chunk.get("word_count", 0),
-                    "file_type": collection.file_type,
-                    # Add CSV-specific metadata if available
-                    "row_number": chunk.get("row_number"),
-                    "headers": str(chunk.get("headers", [])) if chunk.get("headers") else None
-                })
+                metadatas.append(
+                    {
+                        "collection_id": collection.id,
+                        "agent_id": collection.agent_id,
+                        "chunk_index": chunk["chunk_index"],
+                        "content_type": content_type,
+                        "char_count": chunk.get("char_count", 0),
+                        "word_count": chunk.get("word_count", 0),
+                        "file_type": collection.file_type,
+                        # Add CSV-specific metadata if available
+                        "row_number": chunk.get("row_number"),
+                        "headers": str(chunk.get("headers", []))
+                        if chunk.get("headers")
+                        else None,
+                    }
+                )
                 ids.append(doc_id)
 
             # Store in ChromaDB
-            chroma_collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids
-            )
+            chroma_collection.add(documents=documents, metadatas=metadatas, ids=ids)
 
             # Update collection with chunk count
             collection.chunk_count = len(chunks)
@@ -443,11 +494,7 @@ class CollectionService:
             raise Exception(f"Error processing collection content: {str(e)}")
 
     def search_collection(
-        self,
-        agent_id: str,
-        collection_name: str,
-        query: str,
-        limit: int = 50
+        self, agent_id: str, collection_name: str, query: str, limit: int = 50
     ) -> Dict[str, Any]:
         """
         Search a collection for relevant chunks.
@@ -469,7 +516,7 @@ class CollectionService:
                     Collection.agent_id == agent_id,
                     Collection.name == collection_name,
                     Collection.active,
-                    Collection.status == "ready"
+                    Collection.status == "ready",
                 )
                 .first()
             )
@@ -478,7 +525,7 @@ class CollectionService:
                 return {
                     "success": False,
                     "error": f"Collection '{collection_name}' not found or not ready",
-                    "results": []
+                    "results": [],
                 }
 
             # Get ChromaDB collection
@@ -490,28 +537,38 @@ class CollectionService:
                 return {
                     "success": False,
                     "error": "ChromaDB collection not found",
-                    "results": []
+                    "results": [],
                 }
 
             # Perform search
             search_results = chroma_collection.query(
                 query_texts=[query],
                 n_results=min(limit, 50),  # Max 50 as requested
-                include=["documents", "metadatas", "distances"]
+                include=["documents", "metadatas", "distances"],
             )
 
             # Format results
             results = []
             if search_results["documents"]:
                 documents = search_results["documents"][0]
-                metadatas = search_results["metadatas"][0] if search_results["metadatas"] else []
-                distances = search_results["distances"][0] if search_results["distances"] else []
+                metadatas = (
+                    search_results["metadatas"][0]
+                    if search_results["metadatas"]
+                    else []
+                )
+                distances = (
+                    search_results["distances"][0]
+                    if search_results["distances"]
+                    else []
+                )
 
                 for i, doc in enumerate(documents):
                     result = {
                         "text": doc,
-                        "relevance_score": 1 - distances[i] if i < len(distances) else 0,
-                        "metadata": metadatas[i] if i < len(metadatas) else {}
+                        "relevance_score": 1 - distances[i]
+                        if i < len(distances)
+                        else 0,
+                        "metadata": metadatas[i] if i < len(metadatas) else {},
                     }
                     results.append(result)
 
@@ -521,15 +578,11 @@ class CollectionService:
                 "collection_id": collection.id,
                 "query": query,
                 "total_results": len(results),
-                "results": results
+                "results": results,
             }
 
         except Exception as e:
-            return {
-                "success": False,
-                "error": f"Search error: {str(e)}",
-                "results": []
-            }
+            return {"success": False, "error": f"Search error: {str(e)}", "results": []}
 
     def get_agent_collections(self, agent_id: str) -> List[Collection]:
         """Get all collections for an agent"""
@@ -547,7 +600,7 @@ class CollectionService:
             .filter(
                 Collection.id == collection_id,
                 Collection.agent_id == agent_id,
-                Collection.active
+                Collection.active,
             )
             .first()
         )
@@ -561,7 +614,9 @@ class CollectionService:
 
             # Delete from ChromaDB
             try:
-                self.chroma_client.delete_collection(name=collection.chroma_collection_name)
+                self.chroma_client.delete_collection(
+                    name=collection.chroma_collection_name
+                )
             except Exception as e:
                 logger.warning("Could not delete ChromaDB collection: %s", e)
 
@@ -587,10 +642,7 @@ class CollectionService:
         """Get a collection by ID only (without agent verification)"""
         return (
             self.db_session.query(Collection)
-            .filter(
-                Collection.id == collection_id,
-                Collection.active
-            )
+            .filter(Collection.id == collection_id, Collection.active)
             .first()
         )
 
@@ -620,7 +672,7 @@ class CollectionService:
                 f"You have been provided with {collection_count} collection{'s' if collection_count != 1 else ''}. These collections are your only sources of truth.",
                 "Do not rely on external information. Do not hallucinate.",
                 "",
-                "Here are the collections:"
+                "Here are the collections:",
             ]
 
             for i, collection in enumerate(ready_collections, 1):
@@ -628,27 +680,33 @@ class CollectionService:
                 notes = collection.notes or ""
 
                 # Build the collection line
-                collection_line = f"{i}. {collection.display_name} — Purpose: {description}."
+                collection_line = (
+                    f"{i}. {collection.display_name} — Purpose: {description}."
+                )
 
                 if notes:
                     collection_line += f" Key rules: {notes}."
 
                 prompt_parts.append(collection_line)
 
-            prompt_parts.extend([
-                "",
-                "When answering a user query:",
-                "- Select the most relevant collection(s).",
-                "- Call `search_collection(collection_name, query, limit=50)` to retrieve results.",
-                "- Read the retrieved snippets carefully.",
-                "- Answer strictly based on retrieved content.",
-                "- If snippets do not contain the answer, say \"I don't know.\"",
-                "",
-                "Available collection names for search_collection function:"
-            ])
+            prompt_parts.extend(
+                [
+                    "",
+                    "When answering a user query:",
+                    "- Select the most relevant collection(s).",
+                    "- Call `search_collection(collection_name, query, limit=50)` to retrieve results.",
+                    "- Read the retrieved snippets carefully.",
+                    "- Answer strictly based on retrieved content.",
+                    '- If snippets do not contain the answer, say "I don\'t know."',
+                    "",
+                    "Available collection names for search_collection function:",
+                ]
+            )
 
             for collection in ready_collections:
-                prompt_parts.append(f"- \"{collection.name}\" (for {collection.display_name})")
+                prompt_parts.append(
+                    f'- "{collection.name}" (for {collection.display_name})'
+                )
 
             return "\n".join(prompt_parts)
 

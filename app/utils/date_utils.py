@@ -3,8 +3,7 @@ from typing import Optional
 
 
 def normalize_date_range(
-    date_from: Optional[datetime] = None,
-    date_to: Optional[datetime] = None
+    date_from: Optional[datetime] = None, date_to: Optional[datetime] = None
 ) -> tuple[datetime, datetime]:
     """
     Normalize date range to ensure proper filtering:

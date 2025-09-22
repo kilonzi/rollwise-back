@@ -63,7 +63,9 @@ def create_demo_agent(user_id: str):
         db.add(agent)
         db.commit()
         db.refresh(agent)
-        logger.info("Created agent: %s (ID: %s) for user %s", agent.name, agent.id, user_id)
+        logger.info(
+            "Created agent: %s (ID: %s) for user %s", agent.name, agent.id, user_id
+        )
         return agent
     finally:
         db.close()

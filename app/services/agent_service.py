@@ -21,31 +21,34 @@ class AgentService:
         vertex_client = get_vertex_ai_client()
         self.model = vertex_client.get_model()
 
-    def build_agent_config(self, agent: Agent, phone_number: str = None, conversation_id: str = None) -> Dict[str, Any]:
+    def build_agent_config(
+        self, agent: Agent, phone_number: str = None, conversation_id: str = None
+    ) -> Dict[str, Any]:
         """Build Deepgram agent configuration using unified context builder"""
         try:
             return self.context_builder.build_complete_agent_config(
-                agent=agent,
-                phone_number=phone_number,
-                conversation_id=conversation_id
+                agent=agent, phone_number=phone_number, conversation_id=conversation_id
             )
         except Exception as e:
-            app_logger.error(f"Failed to build agent config for agent {agent.id}: {str(e)}")
+            app_logger.error(
+                f"Failed to build agent config for agent {agent.id}: {str(e)}"
+            )
             # Return a minimal fallback configuration to prevent call drops
             return {
                 "agent": {
                     "speak": {
                         "provider": {
                             "type": "deepgram",
-                            "model": agent.voice_model or "aura-2-thalia-en"
+                            "model": agent.voice_model or "aura-2-thalia-en",
                         }
                     },
                     "language": agent.language or "en",
                     "think": {
-                        "prompt": agent.system_prompt or "You are a helpful AI assistant.",
-                        "functions": []
+                        "prompt": agent.system_prompt
+                        or "You are a helpful AI assistant.",
+                        "functions": [],
                     },
-                    "greeting": agent.greeting or "Hello! How can I help you today?"
+                    "greeting": agent.greeting or "Hello! How can I help you today?",
                 }
             }
 

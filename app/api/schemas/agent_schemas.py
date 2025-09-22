@@ -14,13 +14,19 @@ class AgentUpdateRequest(BaseModel):
     language: Optional[str] = None
     tools: Optional[List[str]] = None
     calendar_id: Optional[str] = None
+    timezone: Optional[str] = None
     business_hours: Optional[Dict[str, Any]] = None
+    after_hours_behavior: Optional[str] = None
+    after_hours_message: Optional[str] = None
     default_slot_duration: Optional[int] = None
     max_slot_appointments: Optional[int] = None
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None
     invitees: Optional[List[Dict[str, Any]]] = None
     booking_enabled: Optional[bool] = None
+    closed: Optional[bool] = None
+    closed_message: Optional[str] = None
+    transfer_settings: Optional[Dict[str, Any]] = None
     active: Optional[bool] = None
     conversation_starters: Optional[List[str]] = None
     max_duration: Optional[int] = None
@@ -39,6 +45,21 @@ class AgentCreateRequest(BaseModel):
     conversation_starters: Optional[List[str]] = []
     max_duration: Optional[int] = 300
     language: str = "en"
+    timezone: str = "America/New_York"
+    business_hours: Optional[Dict[str, Any]] = {
+        "mon": {"enabled": True, "open": "09:00", "close": "17:00"},
+        "tue": {"enabled": True, "open": "09:00", "close": "17:00"},
+        "wed": {"enabled": True, "open": "09:00", "close": "17:00"},
+        "thu": {"enabled": True, "open": "09:00", "close": "17:00"},
+        "fri": {"enabled": True, "open": "09:00", "close": "17:00"},
+        "sat": {"enabled": False, "open": "", "close": ""},
+        "sun": {"enabled": False, "open": "", "close": ""},
+    }
+    after_hours_behavior: str = "voicemail"
+    after_hours_message: str = ""
+    closed: bool = False
+    closed_message: Optional[str] = None
+    transfer_settings: Optional[Dict[str, Any]] = None
 
 
 class AgentResponse(BaseModel):
@@ -54,13 +75,19 @@ class AgentResponse(BaseModel):
     language: str
     tools: Optional[List[str]] = None
     calendar_id: Optional[str] = None
+    timezone: Optional[str] = None
     business_hours: Optional[Dict[str, Any]] = None
+    after_hours_behavior: Optional[str] = None
+    after_hours_message: Optional[str] = None
     default_slot_duration: Optional[int] = None
     max_slot_appointments: Optional[int] = None
     buffer_time: Optional[int] = None
     blocked_dates: Optional[List[str]] = None
     invitees: Optional[List[Dict[str, Any]]] = None
     booking_enabled: Optional[bool] = None
+    closed: Optional[bool] = None
+    closed_message: Optional[str] = None
+    transfer_settings: Optional[Dict[str, Any]] = None
     active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None

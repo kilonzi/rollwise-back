@@ -2,6 +2,7 @@ import logging
 import sys
 from typing import Dict, Any, Optional
 
+
 def setup_logging() -> logging.Logger:
     """Configure structured logging for the application"""
 
@@ -19,7 +20,7 @@ def setup_logging() -> logging.Logger:
 
     # Create formatter for structured logging
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
     )
     console_handler.setFormatter(formatter)
 
@@ -28,7 +29,10 @@ def setup_logging() -> logging.Logger:
 
     return logger
 
-def log_request_info(logger: logging.Logger, endpoint: str, user_id: Optional[str] = None, **kwargs: Any) -> None:
+
+def log_request_info(
+    logger: logging.Logger, endpoint: str, user_id: Optional[str] = None, **kwargs: Any
+) -> None:
     """Log request information with context"""
     extra_info = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
     message = f"Request: {endpoint}"
@@ -38,18 +42,25 @@ def log_request_info(logger: logging.Logger, endpoint: str, user_id: Optional[st
         message += f" | {extra_info}"
     logger.info(message)
 
-def log_error_with_context(logger: logging.Logger, error: Exception, context: Dict[str, Any]) -> None:
+
+def log_error_with_context(
+    logger: logging.Logger, error: Exception, context: Dict[str, Any]
+) -> None:
     """Log errors with contextual information"""
     context_str = " | ".join([f"{k}={v}" for k, v in context.items()])
     logger.error(f"Error: {str(error)} | Context: {context_str}")
 
-def log_performance_metric(logger: logging.Logger, operation: str, duration_ms: float, **kwargs: Any) -> None:
+
+def log_performance_metric(
+    logger: logging.Logger, operation: str, duration_ms: float, **kwargs: Any
+) -> None:
     """Log performance metrics"""
     extra_info = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
     message = f"Performance: {operation} | duration_ms={duration_ms:.2f}"
     if extra_info:
         message += f" | {extra_info}"
     logger.info(message)
+
 
 # Create application-wide logger instance
 app_logger = setup_logging()

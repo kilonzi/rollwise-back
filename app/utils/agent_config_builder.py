@@ -19,12 +19,7 @@ class AgentConfigBuilder:
             Voice settings dictionary for the configured provider
         """
         voice_model = agent.voice_model or "aura-2-thalia-en"
-        return {
-            "provider": {
-                "type": "deepgram",
-                "model": voice_model
-            }
-        }
+        return {"provider": {"type": "deepgram", "model": voice_model}}
 
     @staticmethod
     def get_voice_name_from_model(voice_model: str) -> str:
@@ -39,7 +34,12 @@ class AgentConfigBuilder:
             return "Assistant"
 
     @staticmethod
-    def build_agent_config(agent: Agent, customer_context: str = "", collection_details: str = "", conversation_details: str = "") -> Dict[str, Any]:
+    def build_agent_config(
+        agent: Agent,
+        customer_context: str = "",
+        collection_details: str = "",
+        conversation_details: str = "",
+    ) -> Dict[str, Any]:
         """
         Legacy method - Use ContextBuilderService.build_complete_agent_config() instead
 
@@ -69,9 +69,9 @@ class AgentConfigBuilder:
                 "language": language,
                 "think": {
                     "prompt": system_prompt,
-                    "functions": []  # Will be populated by tools registry
+                    "functions": [],  # Will be populated by tools registry
                 },
-                "greeting": greeting
+                "greeting": greeting,
             }
         }
 
@@ -88,14 +88,20 @@ class AgentConfigBuilder:
             return "No collections available."
         prompt = f"You have been provided with {len(collections)} collections. These collections are your only sources of truth.\nDo not rely on external information. Do not hallucinate.\n\nHere are the collections:\n"
         for idx, col in enumerate(collections, 1):
-            name = col.get("collection_name") or col.get("display_name") or f"Collection {idx}"
+            name = (
+                col.get("collection_name")
+                or col.get("display_name")
+                or f"Collection {idx}"
+            )
             desc = col.get("description", "No description provided.")
             rules = col.get("notes") or col.get("rules") or "No rules provided."
             prompt += f"{idx}. {name} — Purpose: {desc}. Key rules: {rules}.\n"
-        prompt += ("\nWhen answering a user query:\n"
-                   "- Select the most relevant collection(s).\n"
-                   "- Call `search_collection(collection_name, query, k=50)` to retrieve results.\n"
-                   "- Read the retrieved snippets carefully.\n"
-                   "- Answer strictly based on retrieved content.\n"
-                   "- If snippets do not contain the answer, say \"I don't know.\"\n")
+        prompt += (
+            "\nWhen answering a user query:\n"
+            "- Select the most relevant collection(s).\n"
+            "- Call `search_collection(collection_name, query, k=50)` to retrieve results.\n"
+            "- Read the retrieved snippets carefully.\n"
+            "- Answer strictly based on retrieved content.\n"
+            '- If snippets do not contain the answer, say "I don\'t know."\n'
+        )
         return prompt

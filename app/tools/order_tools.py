@@ -3,6 +3,7 @@ Order management tools for restaurant operations.
 Provides comprehensive order management functionality including adding/removing items,
 updating orders, getting summaries, finalizing orders, and checking order status.
 """
+
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
@@ -31,25 +32,25 @@ from app.utils.logging_config import app_logger
         "properties": {
             "order_id": {
                 "type": "string",
-                "description": "The order ID to add items to"
+                "description": "The order ID to add items to",
             },
             "item_id": {
                 "type": "string",
-                "description": "The menu item ID from the menu_items table"
+                "description": "The menu item ID from the menu_items table",
             },
             "quantity": {
                 "type": "integer",
                 "description": "Quantity of the item",
                 "default": 1,
-                "minimum": 1
+                "minimum": 1,
             },
             "notes": {
                 "type": "string",
-                "description": "Any special instructions, modifications, or notes for the item"
-            }
+                "description": "Any special instructions, modifications, or notes for the item",
+            },
         },
-        "required": ["order_id", "item_id"]
-    }
+        "required": ["order_id", "item_id"],
+    },
 )
 async def add_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
     """Add an item to an existing order by looking up menu item details"""
@@ -73,14 +74,20 @@ async def add_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": f"Order with ID {order_id} not found"}
 
             # Find the menu item
-            menu_item = db.query(MenuItem).filter(
-                MenuItem.id == item_id,
-                MenuItem.active == True,
-                MenuItem.available == True
-            ).first()
+            menu_item = (
+                db.query(MenuItem)
+                .filter(
+                    MenuItem.id == item_id,
+                    MenuItem.active == True,
+                    MenuItem.available == True,
+                )
+                .first()
+            )
 
             if not menu_item:
-                return {"error": f"Menu item with ID {item_id} not found or unavailable"}
+                return {
+                    "error": f"Menu item with ID {item_id} not found or unavailable"
+                }
 
             # Create the order item
             order_item = OrderItem(
@@ -88,7 +95,7 @@ async def add_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 name=menu_item.name,
                 quantity=quantity,
                 price=menu_item.price,
-                note=notes
+                note=notes,
             )
 
             db.add(order_item)
@@ -111,9 +118,11 @@ async def add_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 "order_total": order.total_price,
                 "pickup_time": order.pickup_time,
                 "special_requests": order.special_requests,
-                "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
+                "confirmed_at": order.confirmed_at.isoformat()
+                if order.confirmed_at
+                else None,
                 "notes": notes,
-                "message": f"Added {quantity}x {menu_item.name} to order {order_id}"
+                "message": f"Added {quantity}x {menu_item.name} to order {order_id}",
             }
 
         finally:
@@ -139,20 +148,20 @@ async def add_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "order_id": {
                 "type": "string",
-                "description": "The order ID to remove items from"
+                "description": "The order ID to remove items from",
             },
             "item_name": {
                 "type": "string",
-                "description": "Name of the menu item to remove (matches what's in the order)"
+                "description": "Name of the menu item to remove (matches what's in the order)",
             },
             "quantity": {
                 "type": "integer",
                 "description": "Quantity to remove (if not specified, removes all of this item)",
-                "minimum": 1
-            }
+                "minimum": 1,
+            },
         },
-        "required": ["order_id", "item_name"]
-    }
+        "required": ["order_id", "item_name"],
+    },
 )
 async def remove_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
     """Remove items from an existing order"""
@@ -172,12 +181,16 @@ async def remove_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": f"Order with ID {order_id} not found"}
 
             # Find the order item(s)
-            order_items = db.query(OrderItem).filter(
-                and_(
-                    OrderItem.order_id == order_id,
-                    OrderItem.name.ilike(f"%{item_name}%")
+            order_items = (
+                db.query(OrderItem)
+                .filter(
+                    and_(
+                        OrderItem.order_id == order_id,
+                        OrderItem.name.ilike(f"%{item_name}%"),
+                    )
                 )
-            ).all()
+                .all()
+            )
 
             if not order_items:
                 return {"error": f"Item '{item_name}' not found in order {order_id}"}
@@ -230,8 +243,10 @@ async def remove_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 "new_order_total": order.total_price,
                 "pickup_time": order.pickup_time,
                 "special_requests": order.special_requests,
-                "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
-                "message": f"Removed {', '.join(removed_items)} from order {order_id}"
+                "confirmed_at": order.confirmed_at.isoformat()
+                if order.confirmed_at
+                else None,
+                "message": f"Removed {', '.join(removed_items)} from order {order_id}",
             }
 
         finally:
@@ -257,24 +272,24 @@ async def remove_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "order_id": {
                 "type": "string",
-                "description": "The order ID containing the item to update"
+                "description": "The order ID containing the item to update",
             },
             "item_name": {
                 "type": "string",
-                "description": "Name of the menu item to update"
+                "description": "Name of the menu item to update",
             },
             "new_quantity": {
                 "type": "integer",
                 "description": "New quantity for the item",
-                "minimum": 1
+                "minimum": 1,
             },
             "new_notes": {
                 "type": "string",
-                "description": "Updated special instructions for the item"
-            }
+                "description": "Updated special instructions for the item",
+            },
         },
-        "required": ["order_id", "item_name"]
-    }
+        "required": ["order_id", "item_name"],
+    },
 )
 async def update_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
     """Update an existing item in an order"""
@@ -298,12 +313,16 @@ async def update_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": f"Order with ID {order_id} not found"}
 
             # Find the order item
-            order_item = db.query(OrderItem).filter(
-                and_(
-                    OrderItem.order_id == order_id,
-                    OrderItem.name.ilike(f"%{item_name}%")
+            order_item = (
+                db.query(OrderItem)
+                .filter(
+                    and_(
+                        OrderItem.order_id == order_id,
+                        OrderItem.name.ilike(f"%{item_name}%"),
+                    )
                 )
-            ).first()
+                .first()
+            )
 
             if not order_item:
                 return {"error": f"Item '{item_name}' not found in order {order_id}"}
@@ -341,8 +360,10 @@ async def update_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
                 "new_order_total": order.total_price,
                 "pickup_time": order.pickup_time,
                 "special_requests": order.special_requests,
-                "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
-                "message": f"Updated {order_item.name}: {', '.join(changes)}"
+                "confirmed_at": order.confirmed_at.isoformat()
+                if order.confirmed_at
+                else None,
+                "message": f"Updated {order_item.name}: {', '.join(changes)}",
             }
 
         finally:
@@ -368,11 +389,11 @@ async def update_order_item(args: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "order_id": {
                 "type": "string",
-                "description": "The order ID to get summary for"
+                "description": "The order ID to get summary for",
             }
         },
-        "required": ["order_id"]
-    }
+        "required": ["order_id"],
+    },
 )
 async def get_order_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     """Get a complete summary of an order"""
@@ -390,7 +411,9 @@ async def get_order_summary(args: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": f"Order with ID {order_id} not found"}
 
             # Get all order items
-            order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            order_items = (
+                db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            )
 
             items_summary = []
             for item in order_items:
@@ -399,7 +422,7 @@ async def get_order_summary(args: Dict[str, Any]) -> Dict[str, Any]:
                     "quantity": item.quantity,
                     "unit_price": item.price,
                     "total_price": item.price * item.quantity,
-                    "notes": item.note or ""
+                    "notes": item.note or "",
                 }
                 items_summary.append(item_data)
 
@@ -415,9 +438,13 @@ async def get_order_summary(args: Dict[str, Any]) -> Dict[str, Any]:
                 "total_price": order.total_price or 0,
                 "pickup_time": order.pickup_time,
                 "special_requests": order.special_requests,
-                "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
-                "created_at": order.created_at.isoformat() if order.created_at else None,
-                "message": f"Order {order_id} contains {len(items_summary)} items totaling ${order.total_price or 0:.2f}"
+                "confirmed_at": order.confirmed_at.isoformat()
+                if order.confirmed_at
+                else None,
+                "created_at": order.created_at.isoformat()
+                if order.created_at
+                else None,
+                "message": f"Order {order_id} contains {len(items_summary)} items totaling ${order.total_price or 0:.2f}",
             }
 
         finally:
@@ -442,25 +469,22 @@ async def get_order_summary(args: Dict[str, Any]) -> Dict[str, Any]:
     parameters={
         "type": "object",
         "properties": {
-            "order_id": {
-                "type": "string",
-                "description": "The order ID to finalize"
-            },
+            "order_id": {"type": "string", "description": "The order ID to finalize"},
             "customer_name": {
                 "type": "string",
-                "description": "Customer's name for the order"
+                "description": "Customer's name for the order",
             },
             "pickup_time": {
                 "type": "string",
-                "description": "Requested pickup time (e.g., 'ASAP', '2:30 PM', '45 minutes'). Defaults to 30 minutes from now."
+                "description": "Requested pickup time (e.g., 'ASAP', '2:30 PM', '45 minutes'). Defaults to 30 minutes from now.",
             },
             "special_requests": {
                 "type": "string",
-                "description": "Any special requests for the entire order"
-            }
+                "description": "Any special requests for the entire order",
+            },
         },
-        "required": ["order_id", "customer_name"]
-    }
+        "required": ["order_id", "customer_name"],
+    },
 )
 async def finalize_order(args: Dict[str, Any]) -> Dict[str, Any]:
     """Finalize an order by setting it to active and updating details"""
@@ -481,7 +505,9 @@ async def finalize_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 return {"error": f"Order with ID {order_id} not found"}
 
             # Check if order has items
-            order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            order_items = (
+                db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            )
             if not order_items:
                 return {"error": "Cannot finalize empty order. Please add items first."}
 
@@ -490,7 +516,9 @@ async def finalize_order(args: Dict[str, Any]) -> Dict[str, Any]:
 
             # Set default pickup time to 30 minutes from now if not provided
             if not pickup_time:
-                pickup_time = (confirmed_at + timedelta(minutes=30)).strftime("%I:%M %p")
+                pickup_time = (confirmed_at + timedelta(minutes=30)).strftime(
+                    "%I:%M %p"
+                )
 
             # Update order details
             order.active = True
@@ -518,7 +546,7 @@ async def finalize_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "total_items": len(order_items),
                 "final_total": final_total,
                 "confirmed_at": order.confirmed_at.isoformat(),
-                "message": f"Order {order_id} has been confirmed and activated. Total: ${final_total:.2f}. Pickup: {pickup_time}"
+                "message": f"Order {order_id} has been confirmed and activated. Total: ${final_total:.2f}. Pickup: {pickup_time}",
             }
 
         finally:
@@ -544,27 +572,27 @@ async def finalize_order(args: Dict[str, Any]) -> Dict[str, Any]:
         "properties": {
             "phone_number": {
                 "type": "string",
-                "description": "Customer's phone number to search for orders"
+                "description": "Customer's phone number to search for orders",
             },
             "status": {
                 "type": "string",
-                "description": "Filter by order status (e.g., 'pending', 'confirmed', 'completed')"
+                "description": "Filter by order status (e.g., 'pending', 'confirmed', 'completed')",
             },
             "active_only": {
                 "type": "boolean",
                 "description": "Only return active orders",
-                "default": True
+                "default": True,
             },
             "limit": {
                 "type": "integer",
                 "description": "Maximum number of orders to return",
                 "default": 2,
                 "minimum": 1,
-                "maximum": 20
-            }
+                "maximum": 20,
+            },
         },
-        "required": ["phone_number"]
-    }
+        "required": ["phone_number"],
+    },
 )
 async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
     """Find customer orders by phone number and check their status"""
@@ -598,13 +626,15 @@ async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
                     "success": True,
                     "orders": [],
                     "total_found": 0,
-                    "message": f"No orders found for {phone_number}{filter_desc}"
+                    "message": f"No orders found for {phone_number}{filter_desc}",
                 }
 
             orders_summary = []
             for order in orders:
                 # Get order items
-                order_items = db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+                order_items = (
+                    db.query(OrderItem).filter(OrderItem.order_id == order.id).all()
+                )
 
                 order_data = {
                     "order_id": order.id,
@@ -615,17 +645,21 @@ async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
                     "customer_name": order.customer_name,
                     "pickup_time": order.pickup_time,
                     "special_requests": order.special_requests,
-                    "created_at": order.created_at.isoformat() if order.created_at else None,
-                    "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
+                    "created_at": order.created_at.isoformat()
+                    if order.created_at
+                    else None,
+                    "confirmed_at": order.confirmed_at.isoformat()
+                    if order.confirmed_at
+                    else None,
                     "items": [
                         {
                             "name": item.name,
                             "quantity": item.quantity,
                             "price": item.price,
-                            "notes": item.note or ""
+                            "notes": item.note or "",
                         }
                         for item in order_items
-                    ]
+                    ],
                 }
                 orders_summary.append(order_data)
 
@@ -634,7 +668,7 @@ async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
                 "phone_number": phone_number,
                 "orders": orders_summary,
                 "total_found": len(orders),
-                "message": f"Found {len(orders)} order(s) for {phone_number}"
+                "message": f"Found {len(orders)} order(s) for {phone_number}",
             }
 
         finally:
@@ -662,19 +696,22 @@ async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
     parameters={
         "type": "object",
         "properties": {
-            "order_id": {
-                "type": "string",
-                "description": "The order ID to cancel"
-            },
+            "order_id": {"type": "string", "description": "The order ID to cancel"},
             "reason": {
                 "type": "string",
                 "description": "Reason for cancellation (optional)",
-                "enum": ["customer_request", "item_unavailable", "payment_issue", "duplicate_order", "other"],
-                "default": "customer_request"
-            }
+                "enum": [
+                    "customer_request",
+                    "item_unavailable",
+                    "payment_issue",
+                    "duplicate_order",
+                    "other",
+                ],
+                "default": "customer_request",
+            },
         },
-        "required": ["order_id"]
-    }
+        "required": ["order_id"],
+    },
 )
 async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
     """Cancel an order if it meets cancellation criteria"""
@@ -694,19 +731,27 @@ async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
 
             # Check if order is eligible for cancellation
             if not order.active:
-                return {"error": f"Order {order_id} is already inactive and cannot be cancelled"}
+                return {
+                    "error": f"Order {order_id} is already inactive and cannot be cancelled"
+                }
 
             if order.status == "in_progress":
-                return {"error": f"Order {order_id} is currently in progress and cannot be cancelled. Please contact the restaurant directly."}
+                return {
+                    "error": f"Order {order_id} is currently in progress and cannot be cancelled. Please contact the restaurant directly."
+                }
 
             if order.status == "completed":
-                return {"error": f"Order {order_id} is already completed and cannot be cancelled"}
+                return {
+                    "error": f"Order {order_id} is already completed and cannot be cancelled"
+                }
 
             if order.status == "cancelled":
                 return {"error": f"Order {order_id} is already cancelled"}
 
             # Get order items for refund calculation
-            order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            order_items = (
+                db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+            )
             refund_amount = order.total_price or 0
 
             # Cancel the order
@@ -729,7 +774,7 @@ async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
                 "cancelled_at": order.cancelled_at.isoformat(),
                 "refund_amount": refund_amount,
                 "total_items_cancelled": len(order_items),
-                "message": f"Order {order_id} has been successfully cancelled. Refund amount: ${refund_amount:.2f}"
+                "message": f"Order {order_id} has been successfully cancelled. Refund amount: ${refund_amount:.2f}",
             }
 
         finally:
@@ -758,12 +803,17 @@ async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
             "reason": {
                 "type": "string",
                 "description": "Brief reason for hanging up",
-                "enum": ["conversation_complete", "user_inactive", "user_goodbye", "no_response"],
-                "default": "conversation_complete"
+                "enum": [
+                    "conversation_complete",
+                    "user_inactive",
+                    "user_goodbye",
+                    "no_response",
+                ],
+                "default": "conversation_complete",
             }
         },
-        "required": []
-    }
+        "required": [],
+    },
 )
 async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
     """End the conversation gracefully"""
@@ -778,10 +828,12 @@ async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
             "action": "hangup",  # Triggers first hangup mechanism (line 272)
             "reason": reason,
             "message": "Thank you for calling! Have a great day!",
-            "_trigger_close": True  # Triggers second hangup mechanism (line 328)
+            "_trigger_close": True,  # Triggers second hangup mechanism (line 328)
         }
 
-        app_logger.info(f"[HANGUP] Returning result to trigger call termination: {result}")
+        app_logger.info(
+            f"[HANGUP] Returning result to trigger call termination: {result}"
+        )
         return result
 
     except Exception as e:
@@ -789,7 +841,7 @@ async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "error": f"Failed to end conversation: {str(e)}",
             "action": "hangup",
-            "_trigger_close": True  # Still try to close even on error
+            "_trigger_close": True,  # Still try to close even on error
         }
 
 
@@ -802,7 +854,7 @@ tools_to_register = [
     finalize_order,
     find_customer_orders,
     cancel_order,
-    hangup_function
+    hangup_function,
 ]
 
 for tool_func in tools_to_register:
@@ -810,7 +862,7 @@ for tool_func in tools_to_register:
         global_registry.register(
             name=tool_func._tool_name,
             description=tool_func._tool_description,
-            parameters=tool_func._tool_parameters
+            parameters=tool_func._tool_parameters,
         )(tool_func)
         app_logger.info(f"Successfully registered {tool_func._tool_name} tool")
     except Exception as e:

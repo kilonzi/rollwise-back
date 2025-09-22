@@ -15,6 +15,7 @@ from app.config.agent_constants import PLATFORM_TEMPLATE
 from app.models import Agent, Conversation, Order, MenuItem
 from app.tools.registry import global_registry
 from app.utils.logging_config import app_logger
+from app.utils.timezone_utils import build_time_context_for_agent
 
 
 class ContextBuilderService:
@@ -24,11 +25,11 @@ class ContextBuilderService:
         self.db_session = db_session
 
     def build_complete_agent_config(
-            self,
-            agent: Agent,
-            phone_number: str = None,
-            conversation_id: str = None,
-            lookback_days: int = 90
+        self,
+        agent: Agent,
+        phone_number: str = None,
+        conversation_id: str = None,
+        lookback_days: int = 90,
     ) -> Dict[str, Any]:
         """
         Build complete agent configuration with all context data
@@ -52,7 +53,9 @@ class ContextBuilderService:
             # 3. Get current conversation context (includes current order if exists)
             current_conversation_context = ""
             if conversation_id:
-                current_conversation_context = self._build_current_conversation_context(conversation_id)
+                current_conversation_context = self._build_current_conversation_context(
+                    conversation_id
+                )
                 # Extract phone number from current conversation if not provided
                 if not phone_number:
                     phone_number = self._get_phone_from_conversation(conversation_id)
@@ -60,16 +63,30 @@ class ContextBuilderService:
             # 4. Get historical conversation context (last 3, excluding current)
             historical_conversation_context = ""
             if phone_number:
-                historical_conversation_context = self._build_historical_conversation_context(
-                    agent.id, phone_number, lookback_days, exclude_conversation_id=conversation_id, limit=3
+                historical_conversation_context = (
+                    self._build_historical_conversation_context(
+                        agent.id,
+                        phone_number,
+                        lookback_days,
+                        exclude_conversation_id=conversation_id,
+                        limit=3,
+                    )
                 )
 
             # 5. Get historical order context (last 3, excluding current if it exists)
             historical_order_context = ""
             if phone_number:
-                current_order_id = self._get_current_order_id(conversation_id) if conversation_id else None
+                current_order_id = (
+                    self._get_current_order_id(conversation_id)
+                    if conversation_id
+                    else None
+                )
                 historical_order_context = self._build_historical_order_context(
-                    agent.id, phone_number, lookback_days, exclude_order_id=current_order_id, limit=3
+                    agent.id,
+                    phone_number,
+                    lookback_days,
+                    exclude_order_id=current_order_id,
+                    limit=3,
                 )
 
             # 6. Build the complete system prompt
@@ -79,48 +96,40 @@ class ContextBuilderService:
                 menu_context=menu_context,
                 current_conversation_context=current_conversation_context,
                 historical_conversation_context=historical_conversation_context,
-                historical_order_context=historical_order_context
+                historical_order_context=historical_order_context,
             )
 
             # 7. Build complete agent configuration using official Deepgram Agent API format
             return {
                 "type": "Settings",
                 "audio": {
-                    "input": {
-                        "encoding": "mulaw",
-                        "sample_rate": 8000
-                    },
+                    "input": {"encoding": "mulaw", "sample_rate": 8000},
                     "output": {
                         "encoding": "mulaw",
                         "sample_rate": 8000,
-                        "container": "none"
-                    }
+                        "container": "none",
+                    },
                 },
                 "agent": {
                     "language": agent.language or "en",
-                    "listen": {
-                        "provider": {
-                            "type": "deepgram",
-                            "model": "nova-3"
-                        }
-                    },
+                    "listen": {"provider": {"type": "deepgram", "model": "nova-3"}},
                     "think": {
                         "provider": {
                             "type": "open_ai",
                             "model": "gpt-4o-mini",
-                            "temperature": 0.4
+                            "temperature": 0.4,
                         },
                         "prompt": system_prompt,
-                        "functions": self._extract_functions_from_registry()
+                        "functions": self._extract_functions_from_registry(),
                     },
                     "speak": {
                         "provider": {
                             "type": "deepgram",
-                            "model": agent.voice_model or "aura-2-thalia-en"
+                            "model": agent.voice_model or "aura-2-thalia-en",
                         }
                     },
-                    "greeting": self._build_greeting(agent)
-                }
+                    "greeting": self._build_greeting(agent),
+                },
             }
 
         except Exception as e:
@@ -134,7 +143,9 @@ class ContextBuilderService:
         # Business name and type
         try:
             business_name = agent.tenant.name if agent.tenant else "the business"
-            business_type = getattr(agent.tenant, 'business_type', None) if agent.tenant else None
+            business_type = (
+                getattr(agent.tenant, "business_type", None) if agent.tenant else None
+            )
 
             if business_type:
                 context_parts.append(f"Business: {business_name} ({business_type})")
@@ -145,10 +156,19 @@ class ContextBuilderService:
 
         # Business hours
         if agent.business_hours:
-            days_map = {1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday",
-                        5: "Friday", 6: "Saturday", 7: "Sunday"}
-            business_days = [days_map.get(day, str(day))
-                             for day in agent.business_hours.get("days", [1, 2, 3, 4, 5])]
+            days_map = {
+                1: "Monday",
+                2: "Tuesday",
+                3: "Wednesday",
+                4: "Thursday",
+                5: "Friday",
+                6: "Saturday",
+                7: "Sunday",
+            }
+            business_days = [
+                days_map.get(day, str(day))
+                for day in agent.business_hours.get("days", [1, 2, 3, 4, 5])
+            ]
             start_time = agent.business_hours.get("start", "09:00")
             end_time = agent.business_hours.get("end", "17:00")
             timezone = agent.business_hours.get("timezone", "UTC")
@@ -168,7 +188,9 @@ class ContextBuilderService:
                 if agent.max_slot_appointments == 1:
                     booking_details.append("no overlapping appointments")
                 else:
-                    booking_details.append(f"max {agent.max_slot_appointments} per slot")
+                    booking_details.append(
+                        f"max {agent.max_slot_appointments} per slot"
+                    )
 
             if booking_details:
                 context_parts.append(f"Booking: {', '.join(booking_details)}")
@@ -190,7 +212,7 @@ class ContextBuilderService:
                     MenuItem.agent_id == agent.id,
                     MenuItem.active == True,
                     MenuItem.available == True,
-                    MenuItem.is_hidden == False
+                    MenuItem.is_hidden == False,
                 )
                 .order_by(MenuItem.category, MenuItem.name)
                 .all()
@@ -211,7 +233,9 @@ class ContextBuilderService:
             for category, items in categories.items():
                 menu_text += f"\n{category.upper()}:\n"
                 for item in items:
-                    menu_text += f"• Item Id: {item.id} - {item.name} - ${item.price:.2f}"
+                    menu_text += (
+                        f"• Item Id: {item.id} - {item.name} - ${item.price:.2f}"
+                    )
                     if item.number:
                         menu_text += f" (#{item.number})"
 
@@ -242,11 +266,7 @@ class ContextBuilderService:
             return "MENU: Temporarily unavailable"
 
     def _build_conversation_history_context(
-            self,
-            agent_id: str,
-            phone_number: str,
-            lookback_days: int,
-            limit: int = 3
+        self, agent_id: str, phone_number: str, lookback_days: int, limit: int = 3
     ) -> str:
         """Build last N conversations context"""
         try:
@@ -260,7 +280,7 @@ class ContextBuilderService:
                         Conversation.caller_phone == phone_number,
                         Conversation.created_at >= cutoff_date,
                         Conversation.summary.isnot(None),
-                        Conversation.summary != ""
+                        Conversation.summary != "",
                     )
                 )
                 .order_by(desc(Conversation.created_at))
@@ -288,11 +308,7 @@ class ContextBuilderService:
             return "CONVERSATION HISTORY: Error retrieving history"
 
     def _build_order_history_context(
-            self,
-            agent_id: str,
-            phone_number: str,
-            lookback_days: int,
-            limit: int = 3
+        self, agent_id: str, phone_number: str, lookback_days: int, limit: int = 3
     ) -> str:
         """Build last N orders context"""
         try:
@@ -305,7 +321,7 @@ class ContextBuilderService:
                         Order.agent_id == agent_id,
                         Order.customer_phone == phone_number,
                         Order.created_at >= cutoff_date,
-                        Order.active == True
+                        Order.active == True,
                     )
                 )
                 .order_by(desc(Order.created_at))
@@ -322,15 +338,21 @@ class ContextBuilderService:
                 days_ago = (datetime.now() - order.created_at).days
                 time_desc = "today" if days_ago == 0 else f"{days_ago} days ago"
 
-                history_text += f"{i}. {time_desc} - ${order.total_price:.2f} ({order.status})\n"
+                history_text += (
+                    f"{i}. {time_desc} - ${order.total_price:.2f} ({order.status})\n"
+                )
 
                 # Add order items
                 if order.order_items:
                     for item in order.order_items[:3]:  # Show max 3 items
-                        history_text += f"   • {item.quantity}x {item.name} @ ${item.price:.2f}\n"
+                        history_text += (
+                            f"   • {item.quantity}x {item.name} @ ${item.price:.2f}\n"
+                        )
 
                     if len(order.order_items) > 3:
-                        history_text += f"   ... and {len(order.order_items) - 3} more items\n"
+                        history_text += (
+                            f"   ... and {len(order.order_items) - 3} more items\n"
+                        )
 
             return history_text
 
@@ -339,13 +361,13 @@ class ContextBuilderService:
             return "ORDER HISTORY: Error retrieving order history"
 
     def _build_unified_system_prompt(
-            self,
-            agent: Agent,
-            business_context: str,
-            menu_context: str,
-            current_conversation_context: str,
-            historical_conversation_context: str,
-            historical_order_context: str
+        self,
+        agent: Agent,
+        business_context: str,
+        menu_context: str,
+        current_conversation_context: str,
+        historical_conversation_context: str,
+        historical_order_context: str,
     ) -> str:
         """Build the complete unified system prompt"""
 
@@ -354,25 +376,52 @@ class ContextBuilderService:
 
         # Agent's custom prompt (if available)
         agent_prompt = ""
-        if agent.system_prompt and agent.system_prompt.strip() != "You are a helpful AI assistant.":
+        if (
+            agent.system_prompt
+            and agent.system_prompt.strip() != "You are a helpful AI assistant."
+        ):
             agent_prompt = f"AGENT PERSONALITY:\n{agent.system_prompt}\n\n"
 
-        # Current date context
-        current_date = datetime.now().strftime("%A, %B %d, %Y")
-        date_context = f"CURRENT DATE: {current_date}\n\n"
+        # Build timezone-aware time context
+        agent_timezone = getattr(agent, "timezone", "UTC") or "UTC"
+        time_context = build_time_context_for_agent(
+            agent_timezone, agent.business_hours or {}
+        )
+
+        # Enhanced date and time context with business status
+        date_time_context = f"""CURRENT DATE & TIME:
+{time_context["current_datetime"]}
+Current Time: {time_context["current_time"]}
+Timezone: {time_context["timezone"]}
+
+BUSINESS STATUS:
+Currently: {"OPEN" if time_context["business_status"]["is_open"] else "CLOSED"}
+Today's Hours: {time_context["business_status"]["today_hours"]["open"]}-{time_context["business_status"]["today_hours"]["close"]} ({"Enabled" if time_context["business_status"]["today_hours"]["enabled"] else "Closed"})"""
+
+        # Add next opening time if closed
+        if (
+            not time_context["business_status"]["is_open"]
+            and "next_opening" in time_context["business_status"]
+        ):
+            date_time_context += (
+                f"\nNext Opening: {time_context['business_status']['next_opening']}"
+            )
+
+        date_time_context += "\n\n"
 
         # Build complete prompt
         complete_prompt = (
-                platform_prompt +
-                agent_prompt +
-                date_context +
-                f"BUSINESS DETAILS:\n{business_context}\n\n" +
-                f"{menu_context}\n\n" +
-                f"{current_conversation_context}\n\n" +
-                f"{historical_conversation_context}\n\n" +
-                f"{historical_order_context}\n\n" +
-                "Use this context to provide personalized, informed service. "
-                "Reference previous interactions and orders naturally when relevant."
+            platform_prompt
+            + agent_prompt
+            + date_time_context
+            + f"BUSINESS DETAILS:\n{business_context}\n\n"
+            + f"{menu_context}\n\n"
+            + f"{current_conversation_context}\n\n"
+            + f"{historical_conversation_context}\n\n"
+            + f"{historical_order_context}\n\n"
+            + "Use this context to provide personalized, informed service. "
+            "Reference previous interactions and orders naturally when relevant. "
+            "Be aware of current business hours and inform customers accordingly."
         )
 
         return complete_prompt
@@ -382,13 +431,16 @@ class ContextBuilderService:
         return {
             "provider": {
                 "type": "deepgram",
-                "model": agent.voice_model or "aura-2-thalia-en"
+                "model": agent.voice_model or "aura-2-thalia-en",
             }
         }
 
     def _build_greeting(self, agent: Agent) -> str:
         """Build greeting message"""
-        if agent.greeting and agent.greeting.strip() != "Hello! How can I help you today?":
+        if (
+            agent.greeting
+            and agent.greeting.strip() != "Hello! How can I help you today?"
+        ):
             return agent.greeting
         return f"Hello! I'm {agent.name}. How can I help you today?"
 
@@ -399,15 +451,15 @@ class ContextBuilderService:
                 "speak": {
                     "provider": {
                         "type": "deepgram",
-                        "model": agent.voice_model or "aura-2-thalia-en"
+                        "model": agent.voice_model or "aura-2-thalia-en",
                     }
                 },
                 "language": agent.language or "en",
                 "think": {
                     "prompt": agent.system_prompt or "You are a helpful AI assistant.",
-                    "functions": []
+                    "functions": [],
                 },
-                "greeting": agent.greeting or "Hello! How can I help you today?"
+                "greeting": agent.greeting or "Hello! How can I help you today?",
             }
         }
 
@@ -438,12 +490,14 @@ class ContextBuilderService:
             )
 
             if order:
-                context_parts.extend([
-                    f"",
-                    f"CURRENT ORDER (ALWAYS USE THIS ORDER):",
-                    f"- Order ID: {order.id}",
-                    f"- Customer Phone Number: {order.customer_phone}"
-                ])
+                context_parts.extend(
+                    [
+                        f"",
+                        f"CURRENT ORDER (ALWAYS USE THIS ORDER):",
+                        f"- Order ID: {order.id}",
+                        f"- Customer Phone Number: {order.customer_phone}",
+                    ]
+                )
 
                 # Add current order items
                 if order.order_items:
@@ -455,22 +509,28 @@ class ContextBuilderService:
                 else:
                     context_parts.append("- Current Items: None (empty order)")
 
-                context_parts.extend([
-                    f"",
-                    f"IMPORTANT ORDER INSTRUCTIONS:",
-                    f"- ALWAYS use Order ID {order.id} for all order operations",
-                    f"- NEVER create a new order during this conversation",
-                    f"- Add/modify/remove items using the existing order tools",
-                    f"- This order already exists and is ready for items"
-                ])
+                context_parts.extend(
+                    [
+                        f"",
+                        f"IMPORTANT ORDER INSTRUCTIONS:",
+                        f"- ALWAYS use Order ID {order.id} for all order operations",
+                        f"- NEVER create a new order during this conversation",
+                        f"- Add/modify/remove items using the existing order tools",
+                        f"- This order already exists and is ready for items",
+                        f" -You must always call finalize_order, this is the only way it's useful",
+                        f" - You must always get the customer's name for the order",
+                    ]
+                )
             else:
-                context_parts.extend([
-                    f"",
-                    f"ORDER STATUS:",
-                    f"- No order found for this conversation",
-                    f"- An order should have been created automatically",
-                    f"- Check with order management if needed"
-                ])
+                context_parts.extend(
+                    [
+                        f"",
+                        f"ORDER STATUS:",
+                        f"- No order found for this conversation",
+                        f"- An order should have been created automatically",
+                        f"- Check with order management if needed",
+                    ]
+                )
 
             return "\n".join(context_parts)
 
@@ -505,12 +565,12 @@ class ContextBuilderService:
             return None
 
     def _build_historical_conversation_context(
-            self,
-            agent_id: str,
-            phone_number: str,
-            lookback_days: int,
-            exclude_conversation_id: str = None,
-            limit: int = 3
+        self,
+        agent_id: str,
+        phone_number: str,
+        lookback_days: int,
+        exclude_conversation_id: str = None,
+        limit: int = 3,
     ) -> str:
         """Build historical conversation context, excluding current conversation"""
         try:
@@ -524,7 +584,7 @@ class ContextBuilderService:
                         Conversation.caller_phone == phone_number,
                         Conversation.created_at >= cutoff_date,
                         Conversation.summary.isnot(None),
-                        Conversation.summary != ""
+                        Conversation.summary != "",
                     )
                 )
                 .order_by(desc(Conversation.created_at))
@@ -539,7 +599,7 @@ class ContextBuilderService:
             if not conversations:
                 return "No historical conversation context available"
 
-            history_text = f"HISTORICAL CONVERSATIONS (last {len(conversations)}):\n"
+            history_text = f"HISTORICAL CONVERSATIONS/INCLUDING A PREVIOUS CUSTOMER NAME (last {len(conversations)}):\n"
 
             for i, conv in enumerate(conversations, 1):
                 days_ago = (datetime.now() - conv.created_at).days
@@ -552,16 +612,18 @@ class ContextBuilderService:
             return history_text
 
         except Exception as e:
-            app_logger.error(f"Error building historical conversation context: {str(e)}")
+            app_logger.error(
+                f"Error building historical conversation context: {str(e)}"
+            )
             return "Error retrieving historical conversation context"
 
     def _build_historical_order_context(
-            self,
-            agent_id: str,
-            phone_number: str,
-            lookback_days: int,
-            exclude_order_id: str = None,
-            limit: int = 3
+        self,
+        agent_id: str,
+        phone_number: str,
+        lookback_days: int,
+        exclude_order_id: str = None,
+        limit: int = 3,
     ) -> str:
         """Build historical order context, excluding current order if it exists"""
         try:
@@ -574,7 +636,7 @@ class ContextBuilderService:
                         Order.agent_id == agent_id,
                         Order.customer_phone == phone_number,
                         Order.created_at >= cutoff_date,
-                        Order.active == True
+                        Order.active == True,
                     )
                 )
                 .order_by(desc(Order.created_at))
@@ -595,15 +657,21 @@ class ContextBuilderService:
                 days_ago = (datetime.now() - order.created_at).days
                 time_desc = "today" if days_ago == 0 else f"{days_ago} days ago"
 
-                history_text += f"{i}. {time_desc} - ${order.total_price:.2f} ({order.status})\n"
+                history_text += (
+                    f"{i}. {time_desc} - ${order.total_price:.2f} ({order.status})\n"
+                )
 
                 # Add order items
                 if order.order_items:
                     for item in order.order_items[:3]:  # Show max 3 items
-                        history_text += f"   • {item.quantity}x {item.name} @ ${item.price:.2f}\n"
+                        history_text += (
+                            f"   • {item.quantity}x {item.name} @ ${item.price:.2f}\n"
+                        )
 
                     if len(order.order_items) > 3:
-                        history_text += f"   ... and {len(order.order_items) - 3} more items\n"
+                        history_text += (
+                            f"   ... and {len(order.order_items) - 3} more items\n"
+                        )
 
             return history_text
 
@@ -617,21 +685,28 @@ class ContextBuilderService:
             functions = []
 
             # Get all registered tools from the global registry
-            for tool_name, tool_description in global_registry.tool_descriptions.items():
+            for (
+                tool_name,
+                tool_description,
+            ) in global_registry.tool_descriptions.items():
                 # Convert registry format to Deepgram Agent API format
                 function_def = {
                     "name": tool_description["name"],
-                    "description": tool_description["description"] or f"Execute {tool_name} function",
-                    "parameters": tool_description.get("parameters", {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    })
+                    "description": tool_description["description"]
+                    or f"Execute {tool_name} function",
+                    "parameters": tool_description.get(
+                        "parameters",
+                        {"type": "object", "properties": {}, "required": []},
+                    ),
                 }
                 functions.append(function_def)
-                app_logger.info(f"[REGISTRY] Extracted function: {function_def['name']}")
+                app_logger.info(
+                    f"[REGISTRY] Extracted function: {function_def['name']}"
+                )
 
-            app_logger.info(f"Extracted {len(functions)} functions from registry: {[f['name'] for f in functions]}")
+            app_logger.info(
+                f"Extracted {len(functions)} functions from registry: {[f['name'] for f in functions]}"
+            )
             return functions
 
         except Exception as e:
