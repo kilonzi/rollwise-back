@@ -20,7 +20,7 @@ from app.utils.logging_config import app_logger
 router = APIRouter()
 
 
-@router.post("/", response_model=AgentResponse)
+@router.post("", response_model=AgentResponse)
 async def create_agent(
         agent_data: AgentCreateRequest,
         current_user: User = Depends(get_current_user),
@@ -75,7 +75,7 @@ async def create_agent(
         )
 
 
-@router.get("/", response_model=List[AgentResponse])
+@router.get("", response_model=List[AgentResponse])
 async def get_user_agents(
         current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
