@@ -205,7 +205,7 @@ async def delete_agent(
         )
 
 
-@router.get("/{agent_id}/users/", response_model=List[AgentUserResponse])
+@router.get("/{agent_id}/users", response_model=List[AgentUserResponse])
 async def get_agent_users(
         agent_id: str,
         current_user: User = Depends(get_current_user),
@@ -335,7 +335,7 @@ async def assign_user_by_id(
     return new_agent_user
 
 
-@router.post("/{agent_id}/users/unassign/")
+@router.post("/{agent_id}/users/unassign")
 async def unassign_user_from_agent(
         agent_id: str,
         unassign_data: AgentUserUnassignRequest,

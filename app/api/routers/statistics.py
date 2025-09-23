@@ -11,7 +11,7 @@ from app.api.schemas.statistics_schemas import AgentStatistics
 router = APIRouter()
 
 
-@router.get("/{agent_id}/statistics/", response_model=AgentStatistics)
+@router.get("/{agent_id}/statistics", response_model=AgentStatistics)
 def get_agent_statistics(
     agent: Agent = Depends(validate_agent_access),
     start_date: Optional[str] = Query(

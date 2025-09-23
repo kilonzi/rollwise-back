@@ -160,7 +160,7 @@ async def bulk_update_menu_items(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/{agent_id}/menu-items/categories/", response_model=List[str])
+@router.get("/{agent_id}/menu-items/categories", response_model=List[str])
 async def get_menu_categories(agent_id: str, db: Session = Depends(get_db)):
     """Get all unique menu categories for an agent"""
     try:
@@ -189,7 +189,7 @@ async def toggle_menu_item_availability(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/{agent_id}/menu-items/upload-csv/", response_model=dict)
+@router.post("/{agent_id}/menu-items/upload-csv", response_model=dict)
 async def upload_menu_items_csv(
     agent_id: str,
     file: UploadFile = File(..., description="CSV file with menu items"),
@@ -357,7 +357,7 @@ async def upload_menu_items_csv(
         )
 
 
-@router.get("/{agent_id}/menu-items/csv-template/")
+@router.get("/{agent_id}/menu-items/csv-template")
 async def get_csv_template(agent_id: str):
     """
     Download a CSV template for menu items upload with proper headers and example data
@@ -475,7 +475,7 @@ async def get_csv_template(agent_id: str):
         raise HTTPException(status_code=500, detail="Failed to generate CSV template")
 
 
-@router.get("/{agent_id}/menu-items/download-csv/")
+@router.get("/{agent_id}/menu-items/download-csv")
 async def download_menu_items_csv(
     agent_id: str,
     db: Session = Depends(get_db),

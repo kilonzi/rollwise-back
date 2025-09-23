@@ -4,7 +4,6 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
 
 from app.api.routers import (
     users,
@@ -45,13 +44,6 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
-
-
-@app.middleware("http")
-async def add_trailing_slash(request: Request, call_next):
-    if not request.url.path.endswith("/"):
-        return RedirectResponse(url=str(request.url) + "/")
-    return await call_next(request)
 
 
 # Add CORS middleware
