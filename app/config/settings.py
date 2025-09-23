@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8090"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
-    DEBUG: str = os.getenv("DEBUG", "false").lower() == "true"
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # External URLs
     BASE_URL: str = os.getenv("BASE_URL", "yourdomain.com")
