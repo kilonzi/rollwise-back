@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.models import Agent
-from app.services.collection_service import CollectionService
+
 from app.services.context_builder_service import ContextBuilderService
 from app.utils.logging_config import app_logger
 from app.utils.vertex_ai_client import get_vertex_ai_client
@@ -16,7 +16,6 @@ class AgentService:
 
     def __init__(self, db_session: Session):
         self.db_session = db_session
-        self.collection_service = CollectionService(db_session)
         self.context_builder = ContextBuilderService(db_session)
         vertex_client = get_vertex_ai_client()
         self.model = vertex_client.get_model()

@@ -4,7 +4,7 @@ MenuItemService for managing restaurant menu items
 
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy import or_
 from datetime import datetime
 
 from app.models import MenuItem, Agent

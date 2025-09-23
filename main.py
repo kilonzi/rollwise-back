@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import RedirectResponse
 
 from app.api.routers import (
     users,
@@ -12,7 +13,6 @@ from app.api.routers import (
     communication,
     orders,
     statistics,
-    collections,
     menu_items,
 )
 from app.config.settings import settings
@@ -46,6 +46,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.middleware("http")
+async def add_trailing_slash(request: Request, call_next):
+    if not request.url.path.endswith("/"):
+        return RedirectResponse(url=str(request.url) + "/")
+    return await call_next(request)
+
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -61,7 +69,6 @@ app.add_middleware(
 app.include_router(communication.router, tags=["Twilio"])
 app.include_router(users.router, prefix="/auth", tags=["Auth"])
 app.include_router(agents.router, prefix="/agents", tags=["Agents"])
-app.include_router(collections.router, prefix="/agents", tags=["Collections"])
 app.include_router(menu_items.router, prefix="/agents", tags=["Menu Items"])
 app.include_router(conversations.router, tags=["Conversations"])
 app.include_router(orders.router, tags=["Orders"])
@@ -106,5 +113,5 @@ if __name__ == "__main__":
         host=settings.HOST,
         port=settings.PORT,
         log_level=settings.LOG_LEVEL,
-        reload=True,  # Set to False in production
+        reload=settings.DEBUG,
     )

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8090"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
+    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
     # External URLs
     BASE_URL: str = os.getenv("BASE_URL", "yourdomain.com")
@@ -50,11 +51,11 @@ class Settings(BaseSettings):
         DB_USER: str = os.getenv("DB_USER")
         DB_PASS: str = os.getenv("DB_PASS")
         DB_NAME: str = os.getenv("DB_NAME", "rollwise-db")
-        DB_HOST: str = os.getenv("DB_HOST", "/cloudsql/lister-1234:us-central1:rollwise")
-        DB_PORT: str = os.getenv("DB_PORT", "")
-        DATABASE_URL:str = (
-            f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@/{DB_NAME}?host={DB_HOST}&port={DB_PORT}"
+        DB_HOST: str = os.getenv(
+            "DB_HOST", "/cloudsql/lister-1234:us-central1:rollwise"
         )
+        DB_PORT: str = os.getenv("DB_PORT", "")
+        DATABASE_URL: str = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@/{DB_NAME}?host={DB_HOST}&port={DB_PORT}"
 
     # ChromaDB Cloud
     CHROMA_API_KEY: str = os.getenv("CHROMA_API_KEY", "")

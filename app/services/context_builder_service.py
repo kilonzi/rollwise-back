@@ -477,7 +477,7 @@ Today's Hours: {time_context["business_status"]["today_hours"]["open"]}-{time_co
 
             # Basic conversation info
             context_parts = [
-                f"CURRENT CONVERSATION:",
+                "CURRENT CONVERSATION:",
                 f"- Conversation ID: {conversation.id}",
                 f"- The Customer Phone Number is (don't ask for it), use this one: {conversation.caller_phone}",
             ]
@@ -492,8 +492,8 @@ Today's Hours: {time_context["business_status"]["today_hours"]["open"]}-{time_co
             if order:
                 context_parts.extend(
                     [
-                        f"",
-                        f"CURRENT ORDER (ALWAYS USE THIS ORDER):",
+                        "",
+                        "CURRENT ORDER (ALWAYS USE THIS ORDER):",
                         f"- Order ID: {order.id}",
                         f"- Customer Phone Number: {order.customer_phone}",
                     ]
@@ -511,24 +511,24 @@ Today's Hours: {time_context["business_status"]["today_hours"]["open"]}-{time_co
 
                 context_parts.extend(
                     [
-                        f"",
-                        f"IMPORTANT ORDER INSTRUCTIONS:",
+                        "",
+                        "IMPORTANT ORDER INSTRUCTIONS:",
                         f"- ALWAYS use Order ID {order.id} for all order operations",
-                        f"- NEVER create a new order during this conversation",
-                        f"- Add/modify/remove items using the existing order tools",
-                        f"- This order already exists and is ready for items",
-                        f" -You must always call finalize_order, this is the only way it's useful",
-                        f" - You must always get the customer's name for the order",
+                        "- NEVER create a new order during this conversation",
+                        "- Add/modify/remove items using the existing order tools",
+                        "- This order already exists and is ready for items",
+                        " -You must always call finalize_order, this is the only way it's useful",
+                        " - You must always get the customer's name for the order",
                     ]
                 )
             else:
                 context_parts.extend(
                     [
-                        f"",
-                        f"ORDER STATUS:",
-                        f"- No order found for this conversation",
-                        f"- An order should have been created automatically",
-                        f"- Check with order management if needed",
+                        "",
+                        "ORDER STATUS:",
+                        "- No order found for this conversation",
+                        "- An order should have been created automatically",
+                        "- Check with order management if needed",
                     ]
                 )
 

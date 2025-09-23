@@ -44,14 +44,26 @@ class User(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    agents = relationship("Agent", back_populates="user")
+    agent_associations = relationship("AgentUser", back_populates="user")
+    agents = relationship(
+        "Agent", secondary="agent_users", back_populates="users", viewonly=True
+    )
+
+
+class AgentUser(Base):
+    __tablename__ = "agent_users"
+    agent_id = Column(String, ForeignKey("agents.id"), primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    role = Column(String, nullable=False, default="viewer")  # owner, editor, viewer
+
+    agent = relationship("Agent", back_populates="user_associations")
+    user = relationship("User", back_populates="agent_associations")
 
 
 class Agent(Base):
     __tablename__ = "agents"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
     phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
@@ -114,10 +126,12 @@ class Agent(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="agents")
+    user_associations = relationship("AgentUser", back_populates="agent")
+    users = relationship(
+        "User", secondary="agent_users", back_populates="agents", viewonly=True
+    )
     conversations = relationship("Conversation", back_populates="agent")
     orders = relationship("Order", back_populates="agent")
-    board = relationship("Board", back_populates="agent", uselist=False)
     menu_items = relationship("MenuItem", back_populates="agent")
 
 
@@ -185,42 +199,6 @@ class ToolCall(Base):
     conversation = relationship("Conversation", back_populates="tool_calls")
 
 
-class Board(Base):
-    __tablename__ = "boards"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, unique=True)
-    name = Column(String, nullable=False, default="Agent Board")
-    lanes = Column(
-        JSON,
-        default=lambda: [
-            {"id": "new", "name": "New", "color": "#2196F3", "wipLimit": None},
-            {
-                "id": "in_progress",
-                "name": "In Progress",
-                "color": "#FF9800",
-                "wipLimit": 5,
-            },
-            {"id": "done", "name": "Done", "color": "#4CAF50", "wipLimit": None},
-        ],
-    )
-    labels = Column(
-        JSON,
-        default=lambda: [
-            {"id": "urgent", "name": "Urgent", "color": "#F44336"},
-            {"id": "vip", "name": "VIP Customer", "color": "#9C27B0"},
-            {"id": "delivery", "name": "Delivery", "color": "#607D8B"},
-            {"id": "takeout", "name": "Takeout", "color": "#795548"},
-        ],
-    )
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # Relationships
-    agent = relationship("Agent", back_populates="board")
-
-
 class Order(Base):
     __tablename__ = "orders"
 
@@ -263,32 +241,6 @@ class OrderItem(Base):
 
     # Relationships
     order = relationship("Order", back_populates="order_items")
-
-
-class Collection(Base):
-    __tablename__ = "collections"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
-    name = Column(String, nullable=False, index=True)  # slugified with underscores
-    display_name = Column(String, nullable=False)  # original user input
-    description = Column(Text, nullable=True)
-    notes = Column(Text, nullable=True)
-    file_path = Column(String(500), nullable=True)  # store/collections/{id}.{ext}
-    file_type = Column(String(10), nullable=True)  # pdf, txt, csv, text
-    content_type = Column(
-        String(50), nullable=True
-    )  # auto-detected: menu, policy, faq, etc.
-    chunk_count = Column(Integer, default=0)
-    chroma_collection_name = Column(String, nullable=False)  # collection__{id}
-    status = Column(String(20), default="processing")  # processing, ready, error
-    error_message = Column(Text, nullable=True)  # error details if processing failed
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    # Relationships
-    agent = relationship("Agent")
 
 
 class MenuItem(Base):

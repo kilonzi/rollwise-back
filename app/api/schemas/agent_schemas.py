@@ -1,6 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+
+from .user_schemas import UserResponse
 
 
 class AgentUpdateRequest(BaseModel):
@@ -62,9 +64,30 @@ class AgentCreateRequest(BaseModel):
     transfer_settings: Optional[Dict[str, Any]] = None
 
 
+class AgentUserResponse(BaseModel):
+    role: str
+    user: UserResponse
+
+    class Config:
+        from_attributes = True
+
+
+class AgentUserInviteRequest(BaseModel):
+    email: EmailStr
+    role: str  # owner, editor, viewer
+
+
+class AgentUserAssignByIdRequest(BaseModel):
+    user_id: str
+    role: str  # owner, editor, viewer
+
+
+class AgentUserUnassignRequest(BaseModel):
+    user_id: str
+
+
 class AgentResponse(BaseModel):
     id: str
-    user_id: str
     name: str
     phone_number: Optional[str]
     greeting: str

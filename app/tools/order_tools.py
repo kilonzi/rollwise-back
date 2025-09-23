@@ -620,7 +620,7 @@ async def find_customer_orders(args: Dict[str, Any]) -> Dict[str, Any]:
             orders = query.order_by(Order.created_at.desc()).limit(limit).all()
 
             if not orders:
-                filter_desc = f" (active only)" if active_only else ""
+                filter_desc = " (active only)" if active_only else ""
                 filter_desc += f" (status: {status_filter})" if status_filter else ""
                 return {
                     "success": True,

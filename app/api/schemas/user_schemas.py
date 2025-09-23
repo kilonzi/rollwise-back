@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -23,7 +23,7 @@ class UserResponse(BaseModel):
     phone_number: Optional[str] = None
     photo_url: Optional[str] = None
     provider: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, alias="user_metadata")
     global_role: str
     active: bool
     created_at: datetime
