@@ -22,9 +22,9 @@ router = APIRouter()
 
 @router.post("/", response_model=AgentResponse)
 async def create_agent(
-    agent_data: AgentCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_data: AgentCreateRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Create a new agent and assign the current user as owner"""
     try:
@@ -77,7 +77,7 @@ async def create_agent(
 
 @router.get("/", response_model=List[AgentResponse])
 async def get_user_agents(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+        current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Get all agents associated with the current user"""
     agents = (
@@ -91,9 +91,9 @@ async def get_user_agents(
 
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent_by_id(
-    agent_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Get a specific agent by ID"""
     agent = (
@@ -115,10 +115,10 @@ async def get_agent_by_id(
 
 @router.put("/{agent_id}", response_model=AgentResponse)
 async def update_agent(
-    agent_id: str,
-    agent_data: AgentUpdateRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        agent_data: AgentUpdateRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Update an agent if the user is an owner or editor"""
     agent_user = (
@@ -164,9 +164,9 @@ async def update_agent(
 
 @router.delete("/{agent_id}")
 async def delete_agent(
-    agent_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Delete (deactivate) an agent if the user is an owner"""
     agent_user = (
@@ -207,9 +207,9 @@ async def delete_agent(
 
 @router.get("/{agent_id}/users/", response_model=List[AgentUserResponse])
 async def get_agent_users(
-    agent_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Get all users and their roles for a specific agent"""
     # Verify that the current user has access to this agent
@@ -234,10 +234,10 @@ async def get_agent_users(
 
 @router.post("/{agent_id}/users/invite", response_model=AgentUserResponse)
 async def invite_user_to_agent(
-    agent_id: str,
-    invite_data: AgentUserInviteRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        invite_data: AgentUserInviteRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Invite a user to an agent by email and assign a role."""
     # Check if current user is owner or editor
@@ -286,10 +286,10 @@ async def invite_user_to_agent(
 
 @router.post("/{agent_id}/users/assign_by_id", response_model=AgentUserResponse)
 async def assign_user_by_id(
-    agent_id: str,
-    assign_data: AgentUserAssignByIdRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        assign_data: AgentUserAssignByIdRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Assign a user to an agent by user ID and assign a role."""
     agent_user_permission = (
@@ -337,10 +337,10 @@ async def assign_user_by_id(
 
 @router.post("/{agent_id}/users/unassign/")
 async def unassign_user_from_agent(
-    agent_id: str,
-    unassign_data: AgentUserUnassignRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        unassign_data: AgentUserUnassignRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
 ):
     """Unassign a user from an agent."""
     agent_user_permission = (
