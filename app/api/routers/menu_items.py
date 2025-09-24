@@ -30,7 +30,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_menu_item(
-    agent_id: str, menu_item: MenuItemCreate, db: Session = Depends(get_db)
+        agent_id: str, menu_item: MenuItemCreate, db: Session = Depends(get_db)
 ):
     """Create a new menu item for an agent"""
     try:
@@ -45,26 +45,26 @@ async def create_menu_item(
 
 @router.get("/{agent_id}/menu-items", response_model=MenuItemListResponse)
 async def get_menu_items(
-    agent_id: str,
-    db: Session = Depends(get_db),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(50, ge=1, le=100, description="Items per page"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    available: Optional[bool] = Query(None, description="Filter by availability"),
-    is_popular: Optional[bool] = Query(None, description="Filter by popular items"),
-    is_special: Optional[bool] = Query(None, description="Filter by special items"),
-    is_new: Optional[bool] = Query(None, description="Filter by new items"),
-    is_limited_time: Optional[bool] = Query(
-        None, description="Filter by limited time items"
-    ),
-    is_hidden: Optional[bool] = Query(None, description="Filter by hidden items"),
-    requires_age_check: Optional[bool] = Query(
-        None, description="Filter by age check requirement"
-    ),
-    has_discount: Optional[bool] = Query(None, description="Filter by discount items"),
-    search: Optional[str] = Query(
-        None, description="Search in name, description, or ingredients"
-    ),
+        agent_id: str,
+        db: Session = Depends(get_db),
+        page: int = Query(1, ge=1, description="Page number"),
+        page_size: int = Query(50, ge=1, le=100, description="Items per page"),
+        category: Optional[str] = Query(None, description="Filter by category"),
+        available: Optional[bool] = Query(None, description="Filter by availability"),
+        is_popular: Optional[bool] = Query(None, description="Filter by popular items"),
+        is_special: Optional[bool] = Query(None, description="Filter by special items"),
+        is_new: Optional[bool] = Query(None, description="Filter by new items"),
+        is_limited_time: Optional[bool] = Query(
+            None, description="Filter by limited time items"
+        ),
+        is_hidden: Optional[bool] = Query(None, description="Filter by hidden items"),
+        requires_age_check: Optional[bool] = Query(
+            None, description="Filter by age check requirement"
+        ),
+        has_discount: Optional[bool] = Query(None, description="Filter by discount items"),
+        search: Optional[str] = Query(
+            None, description="Search in name, description, or ingredients"
+        ),
 ):
     """Get paginated list of menu items with optional filtering"""
     try:
@@ -112,7 +112,7 @@ async def get_menu_item(agent_id: str, item_id: str, db: Session = Depends(get_d
 
 @router.put("/{agent_id}/menu-items/{item_id}", response_model=MenuItemResponse)
 async def update_menu_item(
-    agent_id: str, item_id: str, updates: MenuItemUpdate, db: Session = Depends(get_db)
+        agent_id: str, item_id: str, updates: MenuItemUpdate, db: Session = Depends(get_db)
 ):
     """Update a menu item"""
     try:
@@ -145,7 +145,7 @@ async def delete_menu_item(agent_id: str, item_id: str, db: Session = Depends(ge
     "/{agent_id}/menu-items/bulk-update", response_model=List[MenuItemResponse]
 )
 async def bulk_update_menu_items(
-    agent_id: str, bulk_update: MenuItemBulkUpdate, db: Session = Depends(get_db)
+        agent_id: str, bulk_update: MenuItemBulkUpdate, db: Session = Depends(get_db)
 ):
     """Bulk update multiple menu items"""
     try:
@@ -160,7 +160,7 @@ async def bulk_update_menu_items(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/{agent_id}/menu-items/categories", response_model=List[str])
+@router.get("/{agent_id}/menu/categories", response_model=List[str], tags=["Menu"])
 async def get_menu_categories(agent_id: str, db: Session = Depends(get_db)):
     """Get all unique menu categories for an agent"""
     try:
@@ -176,7 +176,7 @@ async def get_menu_categories(agent_id: str, db: Session = Depends(get_db)):
     response_model=MenuItemResponse,
 )
 async def toggle_menu_item_availability(
-    agent_id: str, item_id: str, db: Session = Depends(get_db)
+        agent_id: str, item_id: str, db: Session = Depends(get_db)
 ):
     """Toggle the availability status of a menu item"""
     try:
@@ -189,14 +189,14 @@ async def toggle_menu_item_availability(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/{agent_id}/menu-items/upload-csv", response_model=dict)
+@router.post("/{agent_id}/menu/upload-csv", response_model=dict, tags=["Menu"])
 async def upload_menu_items_csv(
-    agent_id: str,
-    file: UploadFile = File(..., description="CSV file with menu items"),
-    skip_errors: bool = Query(
-        False, description="Skip invalid rows and continue processing"
-    ),
-    db: Session = Depends(get_db),
+        agent_id: str,
+        file: UploadFile = File(..., description="CSV file with menu items"),
+        skip_errors: bool = Query(
+            False, description="Skip invalid rows and continue processing"
+        ),
+        db: Session = Depends(get_db),
 ):
     """
     Upload menu items from a CSV file
@@ -357,7 +357,7 @@ async def upload_menu_items_csv(
         )
 
 
-@router.get("/{agent_id}/menu-items/csv-template")
+@router.get("/{agent_id}/menu/csv-template", tags=["Menu"])
 async def get_csv_template(agent_id: str):
     """
     Download a CSV template for menu items upload with proper headers and example data
@@ -475,26 +475,26 @@ async def get_csv_template(agent_id: str):
         raise HTTPException(status_code=500, detail="Failed to generate CSV template")
 
 
-@router.get("/{agent_id}/menu-items/download-csv")
+@router.get("/{agent_id}/menu/download-csv", tags=["Menu"])
 async def download_menu_items_csv(
-    agent_id: str,
-    db: Session = Depends(get_db),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    available: Optional[bool] = Query(None, description="Filter by availability"),
-    is_popular: Optional[bool] = Query(None, description="Filter by popular items"),
-    is_special: Optional[bool] = Query(None, description="Filter by special items"),
-    is_new: Optional[bool] = Query(None, description="Filter by new items"),
-    is_limited_time: Optional[bool] = Query(
-        None, description="Filter by limited time items"
-    ),
-    is_hidden: Optional[bool] = Query(None, description="Filter by hidden items"),
-    requires_age_check: Optional[bool] = Query(
-        None, description="Filter by age check requirement"
-    ),
-    has_discount: Optional[bool] = Query(None, description="Filter by discount items"),
-    search: Optional[str] = Query(
-        None, description="Search in name, description, or ingredients"
-    ),
+        agent_id: str,
+        db: Session = Depends(get_db),
+        category: Optional[str] = Query(None, description="Filter by category"),
+        available: Optional[bool] = Query(None, description="Filter by availability"),
+        is_popular: Optional[bool] = Query(None, description="Filter by popular items"),
+        is_special: Optional[bool] = Query(None, description="Filter by special items"),
+        is_new: Optional[bool] = Query(None, description="Filter by new items"),
+        is_limited_time: Optional[bool] = Query(
+            None, description="Filter by limited time items"
+        ),
+        is_hidden: Optional[bool] = Query(None, description="Filter by hidden items"),
+        requires_age_check: Optional[bool] = Query(
+            None, description="Filter by age check requirement"
+        ),
+        has_discount: Optional[bool] = Query(None, description="Filter by discount items"),
+        search: Optional[str] = Query(
+            None, description="Search in name, description, or ingredients"
+        ),
 ):
     """
     Download menu items as CSV file with optional filtering
@@ -527,7 +527,7 @@ async def download_menu_items_csv(
         output = io.StringIO()
         fieldnames = [
             "id",
-            "number",
+            # "number",  # Removed as per requirements
             "name",
             "description",
             "category",
@@ -556,7 +556,7 @@ async def download_menu_items_csv(
             writer.writerow(
                 {
                     "id": item.id,
-                    "number": item.number or "",
+                    # "number": item.number or "",  # Removed as per requirements
                     "name": item.name,
                     "description": item.description or "",
                     "category": item.category,
