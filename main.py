@@ -59,7 +59,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(communication.router, prefix="/agent", tags=["Twilio"])
+app.include_router(communication.router, tags=["Twilio"])
 app.include_router(users.router, prefix="/auth", tags=["Auth"])
 app.include_router(agents.router, prefix="/agents", tags=["Agents"])  # Plural form
 app.include_router(agent.router, prefix="/agent", tags=["Agent"])  # Singular form

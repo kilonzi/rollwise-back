@@ -107,4 +107,4 @@ def build_clean_websocket_url(
     """
     # Remove any protocol prefix from base_url and use wss://
     clean_base = base_url.replace("https://", "").replace("http://", "")
-    return f"wss://{clean_base}/agent/ws/{agent_id}/twilio/{conversation_id}/"
+    return f"wss://{clean_base}/ws/{agent_id}/twilio/{conversation_id}/"

@@ -29,7 +29,7 @@ from app.websocket.session_manager import WebSocketSession
 router = APIRouter()
 
 
-@router.post("/{agent_id}/voice")
+@router.post("/agent/{agent_id}/voice")
 async def handle_agent_voice_call(
     agent_id: str, request: Request, db: Session = Depends(get_db)
 ):
@@ -99,7 +99,7 @@ async def handle_agent_voice_call(
     return Response(content=twiml_content, media_type="application/xml")
 
 
-@router.post("/{agent_id}/messages")
+@router.post("/agent/{agent_id}/messages")
 async def handle_agent_sms(
     agent_id: str,
     From: str = Form(...),
@@ -145,7 +145,7 @@ async def handle_agent_sms(
     return {"message": "SMS received", "conversation_id": conversation.id}
 
 
-@router.post("/{agent_id}/callback")
+@router.post("/agent/{agent_id}/callback")
 async def handle_agent_callback(
     agent_id: str, request: Request, db: Session = Depends(get_db)
 ):
