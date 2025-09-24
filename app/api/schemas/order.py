@@ -87,3 +87,7 @@ class OrderUpdateSchema(BaseModel):
     completed_at: Optional[datetime] = Field(
         None, description="When the order was completed."
     )
+
+
+class OrderStatusUpdateSchema(BaseModel):
+    status: str = Field(..., description="The new status of the order.")

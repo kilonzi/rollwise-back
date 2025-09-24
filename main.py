@@ -2,15 +2,17 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     users,
     agents,
+    agent,
     conversations,
     communication,
     orders,
+    agent_orders,  # Import the new agent_orders router
     statistics,
     menu_items,
 )
@@ -45,7 +47,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -58,13 +59,15 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(communication.router, tags=["Twilio"])
+app.include_router(communication.router, prefix="/agent", tags=["Twilio"])
 app.include_router(users.router, prefix="/auth", tags=["Auth"])
-app.include_router(agents.router, prefix="/agents", tags=["Agents"])
-app.include_router(menu_items.router, prefix="/agents", tags=["Menu Items"])
+app.include_router(agents.router, prefix="/agents", tags=["Agents"])  # Plural form
+app.include_router(agent.router, prefix="/agent", tags=["Agent"])  # Singular form
+app.include_router(menu_items.router, prefix="/agent", tags=["Menu Items"])
 app.include_router(conversations.router, tags=["Conversations"])
-app.include_router(orders.router, tags=["Orders"])
-app.include_router(statistics.router, prefix="/agents", tags=["Statistics"])
+app.include_router(orders.router, prefix="/orders", tags=["Orders"])
+app.include_router(agent_orders.router, prefix="/agent", tags=["Agent Orders"])
+app.include_router(statistics.router, prefix="/agent", tags=["Statistics"])
 
 
 # Health check endpoint

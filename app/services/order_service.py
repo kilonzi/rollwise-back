@@ -198,7 +198,7 @@ class OrderService:
 
     @staticmethod
     def update_order_item(
-        db: Session, item_id: int, updates: Dict[str, Any]
+        db: Session, item_id: str, updates: Dict[str, Any]
     ) -> OrderItem:
         """Update an order item's details"""
         try:
@@ -229,7 +229,7 @@ class OrderService:
             raise
 
     @staticmethod
-    def delete_order_item(db: Session, item_id: int) -> bool:
+    def delete_order_item(db: Session, item_id: str) -> bool:
         """Delete an order item"""
         try:
             order_item = db.query(OrderItem).filter(OrderItem.id == item_id).first()

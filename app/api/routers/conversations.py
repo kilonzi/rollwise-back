@@ -47,7 +47,7 @@ def _serialize_message(msg: Message) -> dict:
 
 
 @router.get(
-    "/agents/{agent_id}/conversations", response_model=List[ConversationResponse]
+    "/agent/{agent_id}/conversations", response_model=List[ConversationResponse]
 )
 async def get_agent_conversations(
     agent_id: str,
