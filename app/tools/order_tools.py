@@ -785,66 +785,6 @@ async def cancel_order(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": f"Failed to cancel order: {str(e)}"}
 
 
-@tool(
-    name="hangup_function",
-    description="""Signal to end the conversation and close the connection.
-
-    Use this function when:
-    - The conversation has naturally concluded
-    - User hasn't responded after asking "Are you there?" or similar
-    - User explicitly says goodbye or indicates they want to end the call
-    - You've provided all requested information and no further assistance is needed
-
-    Always be polite before hanging up. Say something like "Thank you for calling! Have a great day!"
-    """,
-    parameters={
-        "type": "object",
-        "properties": {
-            "reason": {
-                "type": "string",
-                "description": "Brief reason for hanging up",
-                "enum": [
-                    "conversation_complete",
-                    "user_inactive",
-                    "user_goodbye",
-                    "no_response",
-                ],
-                "default": "conversation_complete",
-            }
-        },
-        "required": [],
-    },
-)
-async def hangup_function(args: Dict[str, Any]) -> Dict[str, Any]:
-    """End the conversation gracefully"""
-    try:
-        reason = args.get("reason", "conversation_complete")
-
-        app_logger.info(f"[HANGUP] Function called with reason: {reason}")
-
-        # Return result that triggers both hangup mechanisms
-        result = {
-            "success": True,
-            "action": "hangup",  # Triggers first hangup mechanism (line 272)
-            "reason": reason,
-            "message": "Thank you for calling! Have a great day!",
-            "_trigger_close": True,  # Triggers second hangup mechanism (line 328)
-        }
-
-        app_logger.info(
-            f"[HANGUP] Returning result to trigger call termination: {result}"
-        )
-        return result
-
-    except Exception as e:
-        app_logger.error(f"[HANGUP] Error in hangup function: {str(e)}")
-        return {
-            "error": f"Failed to end conversation: {str(e)}",
-            "action": "hangup",
-            "_trigger_close": True,  # Still try to close even on error
-        }
-
-
 # Register all tools
 tools_to_register = [
     add_order_item,
@@ -854,7 +794,6 @@ tools_to_register = [
     finalize_order,
     find_customer_orders,
     cancel_order,
-    hangup_function,
 ]
 
 for tool_func in tools_to_register:

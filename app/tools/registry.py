@@ -152,3 +152,11 @@ try:
     logger.info("Legacy tools loaded and registered successfully")
 except ImportError as e:
     logger.warning(f"Failed to load legacy tools: {e}")
+
+# Auto-import and register calendar tools
+try:
+    from app.tools import calendar_tools
+
+    logger.info("Calendar tools loaded and registered successfully")
+except ImportError as e:
+    logger.warning(f"Failed to load calendar tools: {e}")

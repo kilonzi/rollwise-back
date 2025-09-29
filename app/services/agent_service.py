@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Agent
 
-from app.services.context_builder_service import ContextBuilderService
+from app.config.context_builder import ContextBuilderService
 from app.utils.logging_config import app_logger
 from app.utils.vertex_ai_client import get_vertex_ai_client
 

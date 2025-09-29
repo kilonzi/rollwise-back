@@ -10,7 +10,9 @@ from .database import (
     MenuItem,
     AgentUser,
     get_db,
-    create_tables,
+    Event,
+    Memory,
+    create_tables
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "get_db",
     "create_tables",
     "AgentUser",
+    "Event",
+    "Memory"
 ]

@@ -41,8 +41,38 @@ def update_agent(
     agent, _ = validate_agent_access_with_role(
         agent_id, ["owner", "editor"], current_user, db
     )
-    for key, value in agent_data.model_dump(exclude_unset=True).items():
+
+    # Convert agent_data to dict and handle field mapping
+    update_data = agent_data.model_dump(exclude_unset=True)
+
+    # Map frontend field names to database field names
+    if "enable_booking" in update_data:
+        update_data["booking_enabled"] = update_data.pop("enable_booking")
+    if "enable_order" in update_data:
+        update_data["ordering_enabled"] = update_data.pop("enable_order")
+
+    # Apply updates to the agent
+    for key, value in update_data.items():
         setattr(agent, key, value)
+
+    # Check if we need to create a calendar
+    if (hasattr(agent, 'booking_enabled') and agent.booking_enabled and
+        (not agent.calendar_id or agent.calendar_id is None)):
+
+        from app.services.calendar_service import CalendarService, CalendarCreateRequest
+
+        calendar_service = CalendarService()
+        calendar_req = CalendarCreateRequest(
+            summary=agent.business_name or agent.name,
+            timeZone=agent.timezone if agent.timezone else "UTC"
+        )
+        try:
+            calendar = calendar_service.create_calendar(calendar_req)
+            agent.calendar_id = calendar["id"]
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Calendar creation failed: {str(e)}")
+
     db.commit()
     db.refresh(agent)
     return agent
@@ -181,4 +211,3 @@ def unassign_user_from_agent(
     db.delete(assignment_to_delete)
     db.commit()
     return None
-

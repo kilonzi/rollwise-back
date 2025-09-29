@@ -15,6 +15,7 @@ from app.api.routers import (
     agent_orders,  # Import the new agent_orders router
     statistics,
     menu_items,
+    memories
 )
 from app.config.settings import settings
 from app.models import create_tables
@@ -66,6 +67,7 @@ app.include_router(agent.router, prefix="/agent", tags=["Agent"])  # Singular fo
 app.include_router(menu_items.router, prefix="/agent", tags=["Menu Items"])
 app.include_router(conversations.router, tags=["Conversations"])
 app.include_router(orders.router, prefix="/orders", tags=["Orders"])
+app.include_router(memories.router, prefix="/agent", tags=["Memories"])  # Agent-specific orders
 app.include_router(agent_orders.router, prefix="/agent", tags=["Agent Orders"])
 app.include_router(statistics.router, prefix="/agent", tags=["Statistics"])
 

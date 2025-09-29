@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Float,
+    ARRAY,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -65,6 +66,7 @@ class Agent(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
+    business_name = Column(String, nullable=False)  # Added business_name field
     phone_number = Column(String, unique=True, nullable=True)
     greeting = Column(Text, default="Hello! How can I help you today?")
     voice_model = Column(
@@ -83,6 +85,7 @@ class Agent(Base):
     timezone = Column(
         String, default="America/New_York"
     )  # Agent's timezone (e.g., "America/New_York", "Europe/London")
+
     business_hours = Column(
         JSON,
         default=lambda: {
@@ -116,6 +119,9 @@ class Agent(Base):
     booking_enabled = Column(
         Boolean, default=True
     )  # Whether calendar booking is enabled for this agent
+    ordering_enabled = Column(
+        Boolean, default=True
+    )  # Whether order/menu ordering is enabled for this agent
     closed = Column(
         Boolean, default=False
     )  # Temporarily disable new conversations/orders
@@ -133,6 +139,8 @@ class Agent(Base):
     conversations = relationship("Conversation", back_populates="agent")
     orders = relationship("Order", back_populates="agent")
     menu_items = relationship("MenuItem", back_populates="agent")
+    events = relationship("Event", back_populates="agent")
+    memories = relationship("Memory", back_populates="agent")
 
 
 class Conversation(Base):
@@ -277,6 +285,68 @@ class MenuItem(Base):
 
     # Relationships
     agent = relationship("Agent", back_populates="menu_items")
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    calendar_id = Column(String, nullable=False, index=True)  # Removed FK constraint
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False, index=True)
+    summary = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    timezone = Column(String, nullable=False)
+    phone_number = Column(String, nullable=True)  # Customer phone number
+    attendees = Column(JSON, nullable=True)  # List of attendee emails
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)
+    google_event_id = Column(String, nullable=True)  # Google Calendar event ID
+    cancelled_at = Column(DateTime, nullable=True)
+    cancellation_reason = Column(String, nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    agent = relationship("Agent", back_populates="events")
+    creator = relationship("User")
+
+
+class Memory(Base):
+    __tablename__ = "memories"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=True)
+    message_id = Column(String, ForeignKey("messages.id"), nullable=True)
+
+    memory_type = Column(String, default="lesson")
+    # "lesson", "feedback", "summary", "rule", "fact"
+
+    content = Column(Text, nullable=False)
+
+    memory_metadata = Column(JSON, nullable=True)  # Renamed from metadata
+
+    importance = Column(Float, default=0.5)
+
+    # 🚀 New fields
+    embedding = Column(ARRAY(Float), nullable=True)
+    # e.g., 768-dim vector for semantic recall (use pgvector or external store)
+
+    coach_id = Column(String, ForeignKey("users.id"), nullable=True)
+    # who provided this feedback/lesson
+
+    last_used_at = Column(DateTime, nullable=True)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    agent = relationship("Agent", back_populates="memories")
+    conversation = relationship("Conversation")
+    message = relationship("Message")
+    coach = relationship("User")
 
 
 def get_db_session():

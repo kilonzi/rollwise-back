@@ -22,6 +22,8 @@ def upsert_user(user_in: UserUpsertRequest, db: Session = Depends(get_db)):
         "email": user.email,
         "firebase_uid": user.firebase_uid,
         "email_verified": user.email_verified,
+        "is_admin": user.global_role == 'admin' or False,
+        "is_superadmin": user.global_role == 'superadmin',
     }
     access_token: str = UserService.create_access_token(data)
     data["access_token"] = access_token
@@ -30,7 +32,7 @@ def upsert_user(user_in: UserUpsertRequest, db: Session = Depends(get_db)):
 
 @router.get("/profile", response_model=UserResponse)
 async def get_user_profile(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+        current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Get current user's profile"""
     user = db.query(User).filter(User.id == current_user["id"]).first()
