@@ -1,3 +1,5 @@
+import os
+import json
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field
 from google.oauth2 import service_account
@@ -36,11 +38,37 @@ class EventUpdateRequest(BaseModel):
 
 class CalendarService:
     def __init__(self, delegated_user: str = DELEGATED_USER):
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=SCOPES
-        )
+        credentials = self._get_credentials()
         delegated_creds = credentials.with_subject(delegated_user)
         self.service = build("calendar", "v3", credentials=delegated_creds)
+
+    def _get_credentials(self):
+        """Get service account credentials from environment variable or file"""
+        # Try to get credentials from environment variable first (for cloud deployment)
+        service_account_contents = os.getenv("SERVICE_ACCOUNT_CONTENTS")
+
+        if service_account_contents:
+            # Parse JSON credentials from environment variable
+            try:
+                service_account_info = json.loads(service_account_contents)
+                return service_account.Credentials.from_service_account_info(
+                    service_account_info, scopes=SCOPES
+                )
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid SERVICE_ACCOUNT_CONTENTS JSON: {e}")
+
+        # Fallback to file-based credentials (for local development)
+        if os.path.exists(SERVICE_ACCOUNT_FILE):
+            return service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE, scopes=SCOPES
+            )
+
+        # Neither environment variable nor file found
+        raise ValueError(
+            "No service account credentials found. "
+            "Set SERVICE_ACCOUNT_CONTENTS environment variable with JSON credentials "
+            f"or ensure {SERVICE_ACCOUNT_FILE} exists."
+        )
 
     def create_calendar(self, req: CalendarCreateRequest) -> Dict[str, Any]:
         calendar = req.dict()
