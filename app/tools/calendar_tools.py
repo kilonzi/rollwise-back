@@ -223,12 +223,12 @@ async def create_appointment(args: Dict[str, Any]) -> Dict[str, Any]:
     },
 )
 async def get_available_times(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Check available time slots for the agent"""
+    """Check available time slots for the agent using actual calendar free/busy data"""
     try:
         agent_id = args.get("agent_id")
         date_str = args.get("date")
         duration_minutes = args.get("duration_minutes", 60)
-        days = args.get("days", 7)
+        days = args.get("days", 1)
 
         if not all([agent_id, date_str]):
             return {"error": "agent_id and date are required"}
@@ -246,84 +246,180 @@ async def get_available_times(args: Dict[str, Any]) -> Dict[str, Any]:
             if not agent:
                 return {"error": f"Agent with ID {agent_id} not found"}
 
-            available_slots = []
+            if not agent.calendar_id:
+                return {"error": f"Agent {agent_id} does not have a calendar configured"}
 
-            # Check each day
+            app_logger.info(f"Checking availability for agent {agent.name} ({agent_id}) from {check_date} for {days} days")
+
+            # Get agent scheduling parameters
+            max_appointments_per_slot = agent.max_slot_appointments or 1
+            slot_duration = agent.default_slot_duration or 30  # minutes
+            buffer_time = agent.buffer_time or 10  # minutes between appointments
+            agent_timezone = agent.timezone or "UTC"
+            business_hours = agent.business_hours or {}
+
+            # Total time needed per slot = slot_duration + buffer_time
+            total_slot_time = slot_duration + buffer_time
+
+            app_logger.info(f"Slot parameters: duration={slot_duration}min, buffer={buffer_time}min, max_per_slot={max_appointments_per_slot}")
+
+            available_slots = []
+            calendar_service = CalendarService()
+
+            # Process each day
             for day_offset in range(days):
                 current_date = check_date + timedelta(days=day_offset)
-                day_name = current_date.strftime("%a").lower()  # mon, tue, etc.
+                day_name = current_date.strftime("%a").lower()[:3]  # mon, tue, wed
 
-                # Check if agent has business hours for this day
-                business_hours = agent.business_hours or {}
-                day_hours = business_hours.get(day_name[:3], {})  # mon, tue, wed
+                # Skip past dates
+                now = datetime.now()
+                if current_date < now.date():
+                    app_logger.info(f"Skipping past date: {current_date}")
+                    continue
 
+                # Check business hours for this day
+                day_hours = business_hours.get(day_name, {})
                 if not day_hours.get("enabled", False):
+                    app_logger.info(f"Day {day_name} is not enabled in business hours")
                     continue
 
                 open_time = day_hours.get("open", "09:00")
                 close_time = day_hours.get("close", "17:00")
 
-                # Convert to datetime objects
-                open_datetime = datetime.combine(current_date, datetime.strptime(open_time, "%H:%M").time())
-                close_datetime = datetime.combine(current_date, datetime.strptime(close_time, "%H:%M").time())
+                if not open_time or not close_time:
+                    app_logger.info(f"Missing open/close time for {day_name}")
+                    continue
 
-                # Get existing appointments for this day
-                existing_events = (
-                    db.query(Event)
-                    .filter(
-                        Event.agent_id == agent_id,
-                        Event.active == True,
-                        Event.start_time >= open_datetime,
-                        Event.start_time < close_datetime + timedelta(days=1)
+                # Convert to datetime objects in agent's timezone
+                try:
+                    from datetime import timezone as dt_timezone
+                    import pytz
+
+                    # Parse business hours
+                    open_datetime = datetime.combine(current_date, datetime.strptime(open_time, "%H:%M").time())
+                    close_datetime = datetime.combine(current_date, datetime.strptime(close_time, "%H:%M").time())
+
+                    # Convert to agent's timezone
+                    agent_tz = pytz.timezone(agent_timezone)
+                    open_datetime = agent_tz.localize(open_datetime)
+                    close_datetime = agent_tz.localize(close_datetime)
+
+                except Exception as e:
+                    app_logger.error(f"Timezone/time parsing error: {str(e)}")
+                    continue
+
+                # Skip if current time is past business hours for today
+                if current_date == now.date() and now.time() >= datetime.strptime(close_time, "%H:%M").time():
+                    app_logger.info(f"Current time is past business hours for today")
+                    continue
+
+                # Adjust start time if checking today and current time is after opening
+                if current_date == now.date() and now.time() > datetime.strptime(open_time, "%H:%M").time():
+                    # Round up to next slot boundary
+                    current_minutes = now.hour * 60 + now.minute
+                    slot_start_minutes = ((current_minutes // 15) + 1) * 15  # Round to next 15-min interval
+                    adjusted_start = datetime.combine(current_date, datetime.min.time()) + timedelta(minutes=slot_start_minutes)
+                    open_datetime = agent_tz.localize(adjusted_start)
+
+                # Get free/busy data from Google Calendar
+                time_min = open_datetime.isoformat()
+                time_max = close_datetime.isoformat()
+
+                try:
+                    freebusy_result = calendar_service.get_free_busy(
+                        calendar_id=agent.calendar_id,
+                        time_min=time_min,
+                        time_max=time_max,
+                        timezone=agent_timezone
                     )
-                    .order_by(Event.start_time)
-                    .all()
-                )
 
-                # Find available slots
-                current_time = open_datetime
+                    # Extract busy periods
+                    busy_periods = []
+                    calendars = freebusy_result.get("calendars", {})
+                    calendar_data = calendars.get(agent.calendar_id, {})
+                    busy_times = calendar_data.get("busy", [])
+
+                    for busy_period in busy_times:
+                        start_str = busy_period.get("start")
+                        end_str = busy_period.get("end")
+                        if start_str and end_str:
+                            start_time = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                            end_time = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                            busy_periods.append((start_time, end_time))
+
+                    app_logger.info(f"Found {len(busy_periods)} busy periods for {current_date}")
+
+                except Exception as e:
+                    app_logger.error(f"Error getting free/busy data: {str(e)}")
+                    continue
+
+                # Generate available slots
+                current_slot_start = open_datetime
                 day_slots = []
 
-                while current_time + timedelta(minutes=duration_minutes) <= close_datetime:
-                    slot_end = current_time + timedelta(minutes=duration_minutes)
+                while current_slot_start + timedelta(minutes=slot_duration) <= close_datetime:
+                    slot_end = current_slot_start + timedelta(minutes=slot_duration)
 
-                    # Check if this slot conflicts with existing appointments
-                    conflict = False
-                    for event in existing_events:
-                        if (current_time < event.end_time and slot_end > event.start_time):
-                            conflict = True
-                            break
+                    # Check if this slot conflicts with any busy periods
+                    slot_conflicts = 0
+                    for busy_start, busy_end in busy_periods:
+                        # Convert busy times to agent timezone for comparison
+                        if busy_start.tzinfo is None:
+                            busy_start = pytz.UTC.localize(busy_start).astimezone(agent_tz)
+                            busy_end = pytz.UTC.localize(busy_end).astimezone(agent_tz)
+                        elif busy_start.tzinfo != agent_tz:
+                            busy_start = busy_start.astimezone(agent_tz)
+                            busy_end = busy_end.astimezone(agent_tz)
 
-                    if not conflict:
+                        # Check for overlap
+                        if current_slot_start < busy_end and slot_end > busy_start:
+                            slot_conflicts += 1
+
+                    # Calculate available capacity for this slot
+                    available_capacity = max_appointments_per_slot - slot_conflicts
+
+                    if available_capacity > 0:
+                        # Convert back to naive datetime for JSON serialization
+                        slot_start_naive = current_slot_start.replace(tzinfo=None)
+                        slot_end_naive = slot_end.replace(tzinfo=None)
+
                         day_slots.append({
-                            "start_time": current_time.isoformat(),
-                            "end_time": slot_end.isoformat(),
-                            "formatted_time": current_time.strftime("%I:%M %p"),
+                            "start_time": slot_start_naive.isoformat(),
+                            "end_time": slot_end_naive.isoformat(),
+                            "formatted_time": current_slot_start.strftime("%I:%M %p"),
                             "date": current_date.strftime("%Y-%m-%d"),
                             "day_name": current_date.strftime("%A"),
+                            "timezone": agent_timezone,
+                            "duration_minutes": slot_duration,
+                            "available_capacity": available_capacity,
+                            "max_capacity": max_appointments_per_slot,
                         })
 
-                    # Move to next slot (15-minute intervals)
-                    current_time += timedelta(minutes=15)
+                    # Move to next slot (using total_slot_time which includes buffer)
+                    current_slot_start += timedelta(minutes=15)  # 15-minute slot intervals
 
-                if day_slots:
-                    available_slots.extend(day_slots)
+                app_logger.info(f"Found {len(day_slots)} available slots for {current_date}")
+                available_slots.extend(day_slots)
 
             return {
                 "success": True,
                 "agent_id": agent_id,
                 "checked_dates": f"{check_date} to {check_date + timedelta(days=days-1)}",
                 "duration_minutes": duration_minutes,
+                "slot_duration": slot_duration,
+                "buffer_time": buffer_time,
+                "max_appointments_per_slot": max_appointments_per_slot,
+                "timezone": agent_timezone,
                 "available_slots": available_slots[:20],  # Limit to 20 slots
                 "total_slots_found": len(available_slots),
-                "message": f"Found {len(available_slots)} available time slots of {duration_minutes} minutes each",
+                "message": f"Found {len(available_slots)} available time slots of {slot_duration} minutes each (max {max_appointments_per_slot} appointments per slot)",
             }
 
         finally:
             db.close()
 
     except Exception as e:
-        app_logger.error(f"Error checking available times: {str(e)}")
+        app_logger.error(f"Error checking available times: {str(e)}", exc_info=True)
         return {"error": f"Failed to check available times: {str(e)}"}
 
 

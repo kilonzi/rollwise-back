@@ -112,3 +112,26 @@ class CalendarService:
 
     def delete_event(self, calendar_id: str, event_id: str) -> None:
         self.service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+
+    def get_free_busy(self, calendar_id: str, time_min: str, time_max: str, timezone: str = "UTC") -> Dict[str, Any]:
+        """
+        Query Google Calendar's freebusy API to get busy times for a calendar.
+
+        Args:
+            calendar_id: The calendar ID to query
+            time_min: Start time in RFC3339 format (e.g., '2025-09-29T09:00:00Z')
+            time_max: End time in RFC3339 format (e.g., '2025-09-29T17:00:00Z')
+            timezone: Timezone for the query (default: UTC)
+
+        Returns:
+            Dict containing free/busy information with busy periods
+        """
+        freebusy_request = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "timeZone": timezone,
+            "items": [{"id": calendar_id}]
+        }
+
+        result = self.service.freebusy().query(body=freebusy_request).execute()
+        return result
