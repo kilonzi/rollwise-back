@@ -4,11 +4,9 @@ from typing import Dict, Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Agent
-
 from app.config.context_builder import ContextBuilderService
+from app.models import Agent
 from app.utils.logging_config import app_logger
-from app.utils.vertex_ai_client import get_vertex_ai_client
 
 
 class AgentService:
@@ -17,11 +15,9 @@ class AgentService:
     def __init__(self, db_session: Session):
         self.db_session = db_session
         self.context_builder = ContextBuilderService(db_session)
-        vertex_client = get_vertex_ai_client()
-        self.model = vertex_client.get_model()
 
     def build_agent_config(
-        self, agent: Agent, phone_number: str = None, conversation_id: str = None
+            self, agent: Agent, phone_number: str = None, conversation_id: str = None
     ) -> Dict[str, Any]:
         """Build Deepgram agent configuration using unified context builder"""
         try:
@@ -44,7 +40,7 @@ class AgentService:
                     "language": agent.language or "en",
                     "think": {
                         "prompt": agent.system_prompt
-                        or "You are a helpful AI assistant.",
+                                  or "You are a helpful AI assistant.",
                         "functions": [],
                     },
                     "greeting": agent.greeting or "Hello! How can I help you today?",

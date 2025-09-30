@@ -37,6 +37,11 @@ async def handle_agent_voice_call(
 
     logger.info("[VOICE] Incoming call for agent %s", agent_id)
 
+    # Add delay to let the call ring for a few seconds so caller is ready
+    time.sleep(7)
+    logger.info("[VOICE] Call ring delay completed, processing call")
+
+
     try:
         twilio_data = await extract_twilio_form_data(request)
         logger.debug("[VOICE] Twilio data: %s", twilio_data)
@@ -89,6 +94,7 @@ async def handle_agent_voice_call(
     logger.debug("[VOICE] WebSocket URL: %s", websocket_url)
 
     response = VoiceResponse()
+
     connect = Connect()
     connect.stream(url=websocket_url)
     response.append(connect)

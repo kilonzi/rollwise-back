@@ -200,7 +200,7 @@ class WebSocketSession:
         # End conversation
         try:
             if self.conversation:
-                self.conversation_service.end_conversation(self.conversation.id)
+                await self.conversation_service.end_conversation(self.conversation.id)
                 logger.info(f"[SESSION] Ended conversation: {self.conversation.id}")
         except Exception as cleanup_error:
             logger.exception(f"[SESSION] Error ending conversation: {cleanup_error}")
