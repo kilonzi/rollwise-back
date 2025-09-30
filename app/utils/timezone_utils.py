@@ -14,11 +14,15 @@ from app.utils.logging_config import app_logger as logger
 
 def get_agent_timezone(agent_timezone: str) -> pytz.BaseTzInfo:
     """Get timezone object from agent's timezone string"""
+    if not agent_timezone:
+        # Default to America/New_York if not specified
+        return pytz.timezone("America/New_York")
+
     try:
         return pytz.timezone(agent_timezone)
     except pytz.UnknownTimeZoneError:
-        logger.warning(f"Unknown timezone: {agent_timezone}, falling back to UTC")
-        return pytz.UTC
+        logger.warning(f"Unknown timezone: {agent_timezone}, falling back to America/New_York")
+        return pytz.timezone("America/New_York")
 
 
 def get_current_time_for_agent(agent_timezone: str) -> datetime:

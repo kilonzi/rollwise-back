@@ -216,21 +216,32 @@ class ContextBuilderService:
         return "\n".join(prompt_parts)
 
     def _format_time_context(self, time_context: Dict) -> str:
-        """Format time context into readable string"""
+        """Format time context into readable string with clear guidance about business hours"""
         business_status = time_context["business_status"]
+        is_open = business_status["is_open"]
+        timezone = time_context["timezone"]
 
         context = f"""CURRENT DATE & TIME:
 {time_context["current_datetime"]}
 Current Time: {time_context["current_time"]}
-Timezone: {time_context["timezone"]}
+Timezone: {timezone}
 
 BUSINESS STATUS:
-Currently: {"OPEN" if business_status["is_open"] else "CLOSED"}
+Currently: {"OPEN" if is_open else "CLOSED"}
 Today's Hours: {business_status["today_hours"]["open"]}-{business_status["today_hours"]["close"]} ({"Enabled" if business_status["today_hours"]["enabled"] else "Closed"})"""
 
         # Add next opening time if closed
-        if not business_status["is_open"] and "next_opening" in business_status:
+        if not is_open and "next_opening" in business_status:
             context += f"\nNext Opening: {business_status['next_opening']}"
+
+        # Add clear guidance about business hours
+        context += f"""
+
+BUSINESS HOURS POLICY:
+- You can assist customers with information and questions at ANY time
+- Orders and appointments can ONLY be scheduled during business hours
+- If currently CLOSED, inform customers they can place orders/make appointments for future business hours
+- Politely explain if a requested time is outside business hours and suggest alternative times"""
 
         return f"{context}\n"
 
