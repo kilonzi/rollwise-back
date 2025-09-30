@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config.settings import settings
 from app.models import Conversation, Message, Agent
 from app.utils.logging_config import app_logger as logger
 from app.utils.vertex_ai_client import get_vertex_ai_client
@@ -16,7 +17,7 @@ class ConversationService:
         self.db = db
         # Initialize Vertex AI client
         vertex_client = get_vertex_ai_client()
-        self.model = vertex_client.get_model()
+        self.async_client = vertex_client.get_async_client()
 
     def create_conversation(
         self,
@@ -44,8 +45,8 @@ class ConversationService:
 
         return conversation
 
-    def end_conversation(self, conversation_id: str) -> bool:
-        """End a conversation and calculate duration"""
+    async def end_conversation(self, conversation_id: str) -> bool:
+        """End a conversation, calculate duration, and generate summary"""
         conversation = (
             self.db.query(Conversation)
             .filter(Conversation.id == conversation_id)
@@ -53,12 +54,22 @@ class ConversationService:
         )
         if not conversation:
             return False
+
         conversation.ended_at = datetime.now()
         conversation.status = "completed"
         if conversation.started_at:
             duration = (conversation.ended_at - conversation.started_at).total_seconds()
             conversation.duration_seconds = str(int(duration))
         self.db.commit()
+
+        # Generate conversation summary after ending the conversation
+        try:
+            logger.info("Generating summary for completed conversation %s", conversation_id)
+            await self.summarize_conversation(conversation_id)
+        except Exception as e:
+            logger.error("Failed to generate summary for conversation %s: %s", conversation_id, str(e))
+            # Don't fail the end_conversation if summarization fails
+
         return True
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
@@ -129,7 +140,7 @@ class ConversationService:
         self, conversation_id: str
     ) -> Optional[Dict[str, Any]]:
         """Generate a comprehensive summary of the conversation."""
-        if not self.model:
+        if not self.async_client:
             logger.warning(
                 "Summarization service not available. Vertex AI client not initialized."
             )
@@ -143,7 +154,9 @@ class ConversationService:
         conversation_text = self._format_messages_for_llm(messages)
         try:
             full_prompt = f"{self._get_summarization_prompt()}\n\nConversation to summarize:\n\n{conversation_text}"
-            summary_response = self.model.generate_content(full_prompt)
+            summary_response = await self.async_client.models.generate_content(
+                model=settings.GEMINI_LLM_MODEL, contents=full_prompt
+            )
             summary = summary_response.text
             summary_data = {
                 "conversation_id": conversation_id,
@@ -199,29 +212,17 @@ class ConversationService:
 
     def _get_summarization_prompt(self) -> str:
         """Get the system prompt for conversation summarization"""
-        return """You are an expert conversation summarizer for business phone calls.
+        return """You are an assistant that summarizes business communication transcripts. Read the following transcript and create a clear, concise summary that includes:
 
-Analyze the conversation and provide a summary in the following exact format:
+The main purpose of the conversation.
 
-**KEY POINTS:**
-• Customer's primary need or request
-• Main services/information discussed
-• Any searches performed (clients, pricing, hours, inventory)
-• Specific results or data provided
-• Actions taken or next steps
-• Call outcome
+Key questions or requests from the user.
 
-**DETAILED SUMMARY:**
+The agent's responses and explanations.
 
-Provide a comprehensive narrative summary of the entire conversation. Include:
-- Why the customer called and their specific needs
-- How the business agent responded and what information was shared
-- Any function calls made (searches for clients, pricing, hours, inventory, etc.) and their results
-- The overall tone and satisfaction level of the interaction
-- Any follow-up actions mentioned or required
-- Business insights or customer service quality observations
+Any decisions, commitments, or action items.
 
-Keep the summary professional, detailed, and focused on business-relevant information that would be valuable for customer service review and business intelligence."""
+Ignore filler text or casual conversation. Write the summary in professional, neutral language."""
 
     def _extract_participants(self, messages: List[Dict]) -> List[str]:
         """Extract unique participants from messages"""
@@ -353,3 +354,69 @@ Keep the summary professional, detailed, and focused on business-relevant inform
             query = query.filter(Conversation.agent_id == agent_id)
 
         return query.order_by(Conversation.created_at.desc()).limit(limit).all()
+
+    async def cleanup_stale_conversations(self, timeout_hours: int = 1):
+        """
+        Finds and ends conversations that are 'active' but have had no new messages
+        for a specified duration, or that have no messages at all and are old.
+        """
+        logger.info(f"Starting cleanup of stale conversations older than {timeout_hours} hour(s)...")
+
+        timeout_delta = timedelta(hours=timeout_hours)
+        stale_threshold = datetime.now() - timeout_delta
+
+        # Query 1: Find stale conversations with messages
+        last_message_subquery = (
+            self.db.query(
+                Message.conversation_id,
+                func.max(Message.created_at).label("last_message_time"),
+            )
+            .group_by(Message.conversation_id)
+            .subquery()
+        )
+        stale_with_messages = (
+            self.db.query(Conversation)
+            .join(
+                last_message_subquery,
+                Conversation.id == last_message_subquery.c.conversation_id,
+            )
+            .filter(
+                Conversation.status == "active",
+                last_message_subquery.c.last_message_time < stale_threshold,
+            )
+            .all()
+        )
+
+        # Query 2: Find stale conversations without messages
+        stale_without_messages = (
+            self.db.query(Conversation)
+            .outerjoin(Message)
+            .filter(
+                Conversation.status == "active",
+                Conversation.created_at < stale_threshold,
+            )
+            .group_by(Conversation.id)
+            .having(func.count(Message.id) == 0)
+            .all()
+        )
+
+        stale_conversations = stale_with_messages + stale_without_messages
+
+        if not stale_conversations:
+            logger.info("No stale conversations found.")
+            return
+
+        unique_stale_conversations = {conv.id: conv for conv in stale_conversations}.values()
+
+        logger.info(f"Found {len(unique_stale_conversations)} stale conversations to clean up.")
+
+        for conv in unique_stale_conversations:
+            logger.info(f"Ending stale conversation {conv.id}...")
+            try:
+                await self.end_conversation(conv.id)
+                logger.info(f"Successfully ended and summarized stale conversation {conv.id}.")
+            except Exception as e:
+                logger.error(f"Error ending stale conversation {conv.id}: {str(e)}")
+
+        logger.info("Stale conversation cleanup finished.")
+

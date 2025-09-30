@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 import uvicorn
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ from app.api.routers import (
 from app.config.settings import settings
 from app.models import create_tables
 from app.utils.logging_config import app_logger as logger
+from app.background_tasks import run_stale_conversation_cleanup
 
 load_dotenv(override=True)
 
@@ -38,6 +40,8 @@ async def lifespan(fapp: FastAPI):
     logger.info("📋 Multi-tenant schema ready:")
     logger.info("🎯 Platform ready for multi-tenant agent deployment!")
     logger.info("📖 API Docs: http://%s:%s/docs", settings.HOST, settings.PORT)
+    # Start the background task
+    asyncio.create_task(run_stale_conversation_cleanup())
     yield
 
 
